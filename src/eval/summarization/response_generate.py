@@ -28,6 +28,9 @@ def generate_summaries_model(task_name, selected_data_path, model_path, prompt_t
         st.error("Field mapping must contain one 'Ref Summary' and one 'Transcript' field.")
         return
 
+    transcript_field = ref_summary_field = field_mapping.loc[field_mapping["Field Type"] == "Transcript", "Dataset Field"].values[0]
+
+
     # 读取数据集
     dataset = pd.read_json(selected_data_path)
     results = []
@@ -63,6 +66,8 @@ def generate_summaries_model(task_name, selected_data_path, model_path, prompt_t
     success_num = 0
 
     for i in range(total_data_num):
+        transcript = ""
+        model_output = ""
         try:
             current_row = dataset.iloc[i]
             prompt = prompt_template
@@ -93,7 +98,9 @@ def generate_summaries_model(task_name, selected_data_path, model_path, prompt_t
 
             outputs = pipe(**kwargs)
 
-            match = re.search(r'{"summary":\s*".*?"}', outputs["generated_text"][-1]["content"])
+            model_output = outputs["generated_text"][-1]["content"]
+
+            match = re.search(r'{"summary":\s*".*?"}', model_output)
             if not match:
                 raise ValueError("No match found for the JSON pattern.")
 
@@ -107,10 +114,14 @@ def generate_summaries_model(task_name, selected_data_path, model_path, prompt_t
             if not summary:
                 raise ValueError("No 'summary' key found in the JSON data.")
 
+            transcript = current_row[transcript_field]
+
             # 构造成功的结果数据
             result_data = {
                 "record_index": i,
                 "success": True,
+                "transcript": transcript,
+                "model_output": model_output,
                 "summary": summary
             }
 
@@ -121,8 +132,12 @@ def generate_summaries_model(task_name, selected_data_path, model_path, prompt_t
             result_data = {
                 "record_index": i,
                 "success": False,
+                "transcript": transcript,
+                "model_output": model_output,
                 "summary": ""
             }
+            st.error(f"Error generating summary for record {i}: {e}")
+
 
         results.append(result_data)
 
@@ -177,6 +192,8 @@ def generate_summaries_api(task_name, selected_data_path, prompt_template, api_u
         st.error("Field mapping must contain one 'Ref Summary' and one 'Transcript' field.")
         return
 
+    transcript_field = ref_summary_field = field_mapping.loc[field_mapping["Field Type"] == "Transcript", "Dataset Field"].values[0]
+
     client = OpenAI(api_key=api_key, base_url=api_url)
 
     # 读取数据集
@@ -193,8 +210,14 @@ def generate_summaries_api(task_name, selected_data_path, prompt_template, api_u
     success_num = 0
 
     for i in range(total_data_num):
+        transcript = ""
+        generated_text = ""
         try:
+
             current_row = dataset.iloc[i]
+
+            transcript = current_row[transcript_field]
+
             prompt = prompt_template
             # 替换提示模板中的占位符
             for _, row in field_mapping.iterrows():
@@ -233,10 +256,13 @@ def generate_summaries_api(task_name, selected_data_path, prompt_template, api_u
             if not summary:
                 raise ValueError("No 'summary' key found in the JSON data.")
 
+
             # 构造成功的结果数据
             result_data = {
                 "record_index": i,
                 "success": True,
+                "transcript": transcript,
+                "model_output": generated_text,
                 "summary": summary
             }
 
@@ -247,8 +273,11 @@ def generate_summaries_api(task_name, selected_data_path, prompt_template, api_u
             result_data = {
                 "record_index": i,
                 "success": False,
+                "transcript": transcript,
+                "model_output": generated_text,
                 "summary": ""
             }
+            st.error(f"Error generating summary for record {i}: {e}")
 
         results.append(result_data)
 

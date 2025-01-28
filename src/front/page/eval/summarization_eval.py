@@ -10,7 +10,7 @@ sys.path.append(root_dir)
 import config as conf
 from src.eval.summarization.response_generate import generate_summaries_model, generate_summaries_api
 from src.eval.summarization.generate_keyfact import generate_keyfact_model, generate_keyfact_api
-from src.eval.summarization.llm_judge import llm_fact_checking_judge_model
+from src.eval.summarization.llm_judge import llm_fact_checking_judge_model, llm_fact_checking_judge_api
 import json
 import pandas as pd
 import time
@@ -139,22 +139,14 @@ with (st.container()):
             st.dataframe(df)
 
         st.write("Field mapping")
-        field_mapping = pd.DataFrame(
-                {
-                    "Dataset Field": ["text"],
-                    "Instruction Placeholder": ["{{original_text}}"],
-                    "Field Type": [""]  # 新增列，默认值为空
-                }
-            ),
-        st.session_state["field_mapping"] = field_mapping
 
         # 在 Streamlit 界面中显示带下拉框的编辑器
-        edited_data = st.data_editor(
+        field_mapping = st.data_editor(
             pd.DataFrame(
                 {
-                    "Dataset Field": [],
-                    "Instruction Placeholder": [],
-                    "Field Type": []  # 新增列，默认值为空
+                    "Dataset Field": [None],
+                    "Instruction Placeholder": [None],
+                    "Field Type": [None]  # 新增列，默认值为空
                 }
             ),
             column_config={
@@ -167,7 +159,7 @@ with (st.container()):
             use_container_width=True,
         )
 
-        st.session_state["field_mapping"] = edited_data
+        st.session_state["field_mapping"] = field_mapping
 
         with st.expander("Field mapping examples"):
             st.markdown("- Dataset:\n\n"
@@ -411,9 +403,17 @@ Provide your answer in JSON format. The answer should be a list of dictionaries 
 Transcript:
 {{input_text}}
 Summary:
-{{summary}}
+{{summary_to_judge}}
 """
         judge_template = st.text_area("Judge template", value=judge_template_default, height=200)
+        st.markdown("Please use: \n\n"
+                    "- `{{summary_to_judge}}` to represent the summary to judge.\n\n"
+                    "- `{{input_text}}` to represent the transcript.")
+
+        summary_files = os.listdir(os.path.join(os.getcwd(), "tasks", st.session_state["task"], "summarization"))
+
+        selected_summary_file = st.selectbox("Summary file", summary_files)
+        selected_summary_file_path = os.path.join(os.getcwd(), "tasks", st.session_state["task"], "summarization", selected_summary_file)
 
         max_token_col, temperature_col, top_p_col = st.columns(3)
         with max_token_col:
@@ -426,19 +426,35 @@ Summary:
 
         if st.button("Judge", key="llm_judge_fact_check_button"):
             if judge_model_source != "API":
-                llm_fact_checking_judge_model(
-                    model_path=llm_model_path,
-                    selected_dataset=st.session_state["selected_dataset"],
+                kwargs = {
+                    "model_path": llm_model_path,
+                    "selected_dataset": st.session_state["selected_dataset"],
+                    "task_name": st.session_state["task"],
+                    "prompt_template": judge_template,
+                    "field_mapping": pd.DataFrame(st.session_state["field_mapping"]),
+                    "max_tokens": max_tokens,
+                    "temperature": temperature,
+                    "top_p": top_p
+                }
+
+                if llm_judge_use_adapter and adapter_path.strip():
+                    kwargs["adapter_path"] = adapter_path
+                llm_fact_checking_judge_model(**kwargs)
+            else:
+                llm_fact_checking_judge_api(
                     task_name=st.session_state["task"],
+                    selected_dataset=st.session_state["selected_dataset"],
                     prompt_template=judge_template,
+                    selected_summary_file_path=selected_summary_file_path,
+                    api_url=api_url,
+                    api_key=api_key,
+                    model_engine=model_engine,
                     field_mapping=pd.DataFrame(st.session_state["field_mapping"]),
                     max_tokens=max_tokens,
                     temperature=temperature,
-                    top_p=top_p,
-                    adapter_path=adapter_path
+                    top_p=top_p
                 )
-            else:
-                pass
+
 
         st.divider()
 
