@@ -171,9 +171,18 @@ cython_debug/
 .pypirc
 /LLaMA-Factory/
 
-model/merged_model/*
-model/model_adapter/*
-model/original_model/*
-!model/merged_model/.gitkeep
-!model/model_adapter/.gitkeep
-!model/original_model/.gitkeep
+# repo structure
+models/merged_model/*
+models/model_adapter/*
+models/original_model/*
+models/tool_model/*
+!models/merged_model/.gitkeep
+!models/model_adapter/.gitkeep
+!models/original_model/.gitkeep
+!models/tool_model/.gitkeep
+
+dataset/*
+!dataset/summarization/.gitkeep
+
+tasks/*
+!tasks/.gitkeep
