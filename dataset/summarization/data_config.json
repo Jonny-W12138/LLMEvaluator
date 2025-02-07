@@ -1,0 +1,11 @@
+{
+    "default_summarization_dataset": {
+        "root_path": "dataset/summarization/default_summarization_dataset",
+        "data_path": "dataset/summarization/default_summarization_dataset/default_summarization_dataset.json"
+    },
+    "default_light_summarization_dataset": {
+        "root_path": "dataset/summarization/default_light_summarization_dataset",
+        "data_path": "dataset/summarization/default_light_summarization_dataset/default_light_summarization_dataset.json",
+        "keyfacts_path": "dataset/summarization/default_light_summarization_dataset/default_light_summarization_dataset_keyfacts.json"
+    }
+}

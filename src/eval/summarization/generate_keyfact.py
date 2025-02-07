@@ -3,6 +3,7 @@ import pandas as pd
 import torch
 import peft
 from openai import OpenAI
+from peft import PeftConfig, PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 import re
 import json
@@ -39,6 +40,11 @@ def generate_keyfact_model(model_path, selected_dataset, task_name, prompt_templ
     )
     tokenizer = AutoTokenizer.from_pretrained(model_path)
 
+    if adapter_path:
+        peft_config = PeftConfig.from_pretrained(adapter_path)
+        model = PeftModel.from_pretrained(model, adapter_path)
+        model.eval()
+
     # Use pipeline
     pipe = pipeline(
         "text-generation",
@@ -61,8 +67,6 @@ def generate_keyfact_model(model_path, selected_dataset, task_name, prompt_templ
                 prompt = prompt.replace(f"{placeholder}", str(current_row[dataset_field]))
 
             messages = [
-                {"role": "system", "content": """You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe. Your answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure that your responses are socially unbiased and positive in nature.
-                If a question does not make any sense, or is not factually coherent, explain why instead of answering something not correct. If you don't know the answer to a question, please don't share false information."""},
                 {"role": "user", "content": prompt}
             ]
 
@@ -114,8 +118,6 @@ def generate_keyfact_model(model_path, selected_dataset, task_name, prompt_templ
         my_bar.progress((i + 1) / total_data_num, text=f"Processing {i + 1}/{total_data_num}")
         time.sleep(1)  # 模拟耗时
 
-
-    current_time = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
     save_dir = os.path.join(datasets[selected_dataset]['root_path'], f"{selected_dataset}_keyfacts.json")
 
@@ -182,8 +184,6 @@ def generate_keyfact_api(task_name, selected_dataset, prompt_template, api_url, 
             response = client.chat.completions.create(
                 model=model_engine,
                 messages=[
-                    {"role": "system", "content": """You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe. Your answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure that your responses are socially unbiased and positive in nature.
-                        If a question does not make any sense, or is not factually coherent, explain why instead of answering something not correct. If you don't know the answer to a question, please don't share false information."""},
                     {"role": "user", "content": prompt}
                 ],
                 max_tokens=max_tokens,

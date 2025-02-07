@@ -28,7 +28,7 @@ def generate_summaries_model(task_name, selected_data_path, model_path, prompt_t
         st.error("Field mapping must contain one 'Ref Summary' and one 'Transcript' field.")
         return
 
-    transcript_field = ref_summary_field = field_mapping.loc[field_mapping["Field Type"] == "Transcript", "Dataset Field"].values[0]
+    transcript_field = field_mapping.loc[field_mapping["Field Type"] == "Transcript", "Dataset Field"].values[0]
 
 
     # 读取数据集
@@ -78,15 +78,12 @@ def generate_summaries_model(task_name, selected_data_path, model_path, prompt_t
                 prompt = prompt.replace(f"{placeholder}", str(current_row[dataset_field]))
 
             messages = [
-                {"role": "system", "content": """You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe. Your answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure that your responses are socially unbiased and positive in nature.
-    
-                If a question does not make any sense, or is not factually coherent, explain why instead of answering something not correct. If you don't know the answer to a question, please don't share false information."""},
                 {"role": "user", "content": prompt}
             ]
 
             # 调用生成模型进行推理
             kwargs = {
-                "messages": messages,
+                "text_inputs": messages,
                 "max_new_tokens": max_tokens,
                 "top_p": top_p
             }
@@ -98,21 +95,26 @@ def generate_summaries_model(task_name, selected_data_path, model_path, prompt_t
 
             outputs = pipe(**kwargs)
 
-            model_output = outputs["generated_text"][-1]["content"]
+            model_output = outputs[0]["generated_text"][-1]["content"].strip().replace("\n", "")
 
-            match = re.search(r'{"summary":\s*".*?"}', model_output)
-            if not match:
-                raise ValueError("No match found for the JSON pattern.")
+            # match = re.search(r'{"summary":\s*".*?"}', model_output)
+            # if not match:
+            #     raise ValueError("No match found for the JSON pattern.")
+            #
+            # if match:
+            #     json_data = match.group()
+            #     # 转换为字典并提取summary
+            #     parsed_data = json.loads(json_data)
+            #     summary = parsed_data.get("summary")
+            #     summary = summary.replace(". ", ".\n ")
+            #
+            # if not summary:
+            #     raise ValueError("No 'summary' key found in the JSON data.")
 
-            if match:
-                json_data = match.group()
-                # 转换为字典并提取summary
-                parsed_data = json.loads(json_data)
-                summary = parsed_data.get("summary")
-                summary = summary.replace(". ", ".\n ")
-
-            if not summary:
-                raise ValueError("No 'summary' key found in the JSON data.")
+            summary = model_output
+            summary = summary.replace('```', '')
+            summary_context = json.loads(summary)
+            summary = summary_context['summary']
 
             transcript = current_row[transcript_field]
 
@@ -192,7 +194,7 @@ def generate_summaries_api(task_name, selected_data_path, prompt_template, api_u
         st.error("Field mapping must contain one 'Ref Summary' and one 'Transcript' field.")
         return
 
-    transcript_field = ref_summary_field = field_mapping.loc[field_mapping["Field Type"] == "Transcript", "Dataset Field"].values[0]
+    transcript_field = field_mapping.loc[field_mapping["Field Type"] == "Transcript", "Dataset Field"].values[0]
 
     client = OpenAI(api_key=api_key, base_url=api_url)
 
@@ -228,9 +230,7 @@ def generate_summaries_api(task_name, selected_data_path, prompt_template, api_u
             response = client.chat.completions.create(
                 model=model_engine,
                 messages=[
-                    {"role": "system", "content": """You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe. Your answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure that your responses are socially unbiased and positive in nature.
-                                    If a question does not make any sense, or is not factually coherent, explain why instead of answering something not correct. If you don't know the answer to a question, please don't share false information."""},
-                    {"role": "user", "content": prompt},
+                  {"role": "user", "content": prompt},
                 ],
                 max_tokens=max_tokens,
                 temperature=temperature,
@@ -242,16 +242,10 @@ def generate_summaries_api(task_name, selected_data_path, prompt_template, api_u
             # 提取生成的文本
             generated_text = response.choices[0].message.content.strip().replace("\n", "")
 
-            match = re.search(r'{"summary":\s*".*?"}', generated_text)
-            if not match:
-                raise ValueError("No match found for the JSON pattern.")
-
-            if match:
-                json_data = match.group()
-                # 转换为字典并提取summary
-                parsed_data = json.loads(json_data)
-                summary = parsed_data.get("summary")
-                summary = summary.replace(". ", ".\n ")
+            summary = generated_text
+            summary = summary.replace('```', '')
+            summary_context = json.loads(summary)
+            summary = summary_context['summary']
 
             if not summary:
                 raise ValueError("No 'summary' key found in the JSON data.")
