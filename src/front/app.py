@@ -4,8 +4,8 @@ pages = {
     "Evaluate": [
         st.Page("page/eval/summarization_eval.py", title="Summarization"),
     ],
-    "Models & Dataset": [
-        st.Page("page/util/upload_dataset.py", title="Upload Dataset"),
+    "Report": [
+        st.Page("page/report/summarization_report.py", title="Summarization"),
     ],
 }
 

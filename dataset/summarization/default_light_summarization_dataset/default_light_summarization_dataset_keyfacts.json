@@ -1,0 +1,49 @@
+{
+    "metadata": {
+        "model_source": "Model",
+        "total_data_num": 2,
+        "success_num": 2,
+        "failed_num": 0,
+        "selected_dataset": "default_light_summarization_dataset",
+        "prompt_template": "You will be provided with a summary. Your task is to decompose the summary into a set of \"key facts\". A \"key fact\" is a single fact written as briefly and clearly as possible, encompassing at most 2-3 entities. \nHere are nine examples of key facts to illustrate the desired level of granularity:\n* Kevin Carr set off on his journey from Haytor.\n* Kevin Carr set off on his journey from Dartmoor.\n* Kevin Carr set off on his journey in July 2013.\n* Kevin Carr is less than 24 hours away from completing his trip.\n* Kevin Carr ran around the world unsupported.\n* Kevin Carr ran with his tent.\n* Kevin Carr is set to break the previous record.\n* Kevin Carr is set to break the record by 24 hours.\n* The previous record was held by an Australian.\nInstruction:\nFirst, read the summary carefully. Second, decompose the summary into (at most 16) key facts. Provide your answer in JSON format. The answer should be a dictionary with the key\"key facts\" containing the key facts as a list:\n{\"key facts\": [\"first key fact\", \"second key fact\", \"third key fact\"]}\nSummary:\n{{summary}}\n",
+        "field_mapping": {
+            "Dataset Field": {
+                "0": "full-text",
+                "1": "ft_llama_summary"
+            },
+            "Instruction Placeholder": {
+                "0": "{{input_text}}",
+                "1": "{{summary}}"
+            },
+            "Field Type": {
+                "0": "Transcript",
+                "1": "Ref Summary"
+            }
+        },
+        "adapter_path": null,
+        "max_tokens": 400,
+        "temperature": 0.0,
+        "top_p": 1.0
+    },
+    "results": [
+        {
+            "record_index": 0,
+            "success": true,
+            "key_facts": [
+                "China's Shanghai Stock Exchange",
+                "foreign institutions",
+                "qualified foreign institutional investors mechanism"
+            ]
+        },
+        {
+            "record_index": 1,
+            "success": true,
+            "key_facts": [
+                "The panda bond market posted record-high issuances by value this year",
+                "The issuance total was up 26% year-on-year",
+                "The market is poised to attract new issuers",
+                "including those from the Middle East and Latin America"
+            ]
+        }
+    ]
+}
