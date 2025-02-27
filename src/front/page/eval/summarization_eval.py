@@ -11,7 +11,7 @@ import config as conf
 from src.eval.summarization.response_generate import generate_summaries_model, generate_summaries_api
 from src.eval.summarization.generate_keyfact import generate_keyfact_model, generate_keyfact_api
 from src.eval.summarization.llm_judge import llm_fact_checking_judge_model, llm_fact_checking_judge_api, \
-llm_fact_alignment_judge_model, llm_fact_alignment_judge_api
+llm_fact_alignment_judge_model, llm_fact_alignment_judge_api, parse_score
 from src.eval.summarization.bert import bert_judge
 from src.eval.summarization.bleurt_judge import bleurt_judge
 from src.eval.summarization.rouge_judge import rouge_judge
@@ -33,11 +33,11 @@ with st.container(border=True):
             if input_task is None or input_task == "":
                 st.error("Task name cannot be empty.")
             else:
-                if os.path.exists(os.path.join(os.getcwd(), "tasks", task)):
-                    st.error(f"Task {task} already exists. See {os.path.join(os.getcwd(), 'tasks', task)}")
+                if os.path.exists(os.path.join(os.getcwd(), "tasks", input_task)):
+                    st.error(f"Task {input_task} already exists. See {os.path.join(os.getcwd(), 'tasks', input_task)}")
                 else:
-                    os.mkdir(os.path.join(os.getcwd(), "tasks", task))
-                    st.success(f"Task {task} created.")
+                    os.mkdir(os.path.join(os.getcwd(), "tasks", input_task))
+                    st.success(f"Task {input_task} created.")
                     task = input_task
                     if task is not None or task != "":
                         st.session_state["task"] = task
@@ -533,7 +533,26 @@ key facts:
                         top_p=top_p
                     )
 
+        st.divider()
+        st.write("Parse and Score")
+        if "task" not in st.session_state or st.session_state["task"] is None:
+            st.info("Please select a task first.")
 
+        else:
+            keyfact_check_files = os.listdir(os.path.join(os.getcwd(), "tasks", st.session_state["task"], "summarization"))
+            keyfact_check_files = [file for file in keyfact_check_files if file.startswith("keyfact_check")]
+            selected_keyfact_check_file = st.selectbox("Keyfact check file", keyfact_check_files)
+
+            keyfact_alignment_files = os.listdir(os.path.join(os.getcwd(), "tasks", st.session_state["task"], "summarization"))
+            keyfact_alignment_files = [file for file in keyfact_alignment_files if file.startswith("keyfact_alignment")]
+            selected_keyfact_alignment_file = st.selectbox("Keyfact alignment file", keyfact_alignment_files)
+
+            if st.button("Parse and Score"):
+                parse_score(
+                    st.session_state["task"],
+                    os.path.join(os.getcwd(), "tasks", st.session_state["task"], "summarization", selected_keyfact_check_file),
+                    os.path.join(os.getcwd(), "tasks", st.session_state["task"], "summarization", selected_keyfact_alignment_file)
+                )
     with bert_tab:
         use_custom_cli = st.toggle("Custom cli", value=False)
         if not use_custom_cli:

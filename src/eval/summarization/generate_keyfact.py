@@ -84,10 +84,18 @@ def generate_keyfact_model(model_path, selected_dataset, task_name, prompt_templ
 
             outputs = pipe(**kwargs)
 
-            match = re.search(r'"key facts": \[(.*?)\]', outputs[0]["generated_text"][-1]["content"], re.DOTALL)
-            if match:
-                list_content = match.group(1)
-                key_facts = [item.strip().strip('"') for item in list_content.split(',')]
+            generated_text = outputs[0]["generated_text"][-1]["content"].strip().replace("\n", "")
+
+            model_res = generated_text
+
+            model_res = model_res.replace('```', '')
+            start = model_res.find('{')
+            end = model_res.rfind('}')
+
+            if start != -1 and end != -1:
+                key_fact = model_res[start:end + 1]
+                key_facts_content = json.loads(key_fact)
+                key_facts = key_facts_content['key facts']
 
 
             else:
@@ -97,6 +105,7 @@ def generate_keyfact_model(model_path, selected_dataset, task_name, prompt_templ
             result_data = {
                 "record_index": i,
                 "success": True,
+                "model_output": generated_text,
                 "key_facts": key_facts
             }
 
@@ -109,6 +118,7 @@ def generate_keyfact_model(model_path, selected_dataset, task_name, prompt_templ
             result_data = {
                 "record_index": i,
                 "success": False,
+                "model_output": generated_text,
                 "key_facts": []
             }
 
@@ -195,10 +205,16 @@ def generate_keyfact_api(task_name, selected_dataset, prompt_template, api_url, 
 
             generated_text = response.choices[0].message.content.strip().replace("\n", "")
 
-            match = re.search(r'"key facts": \[(.*?)\]', generated_text, re.DOTALL)
-            if match:
-                list_content = match.group(1)
-                key_facts = [item.strip().strip('"') for item in list_content.split(',')]
+            model_res = generated_text
+            model_res = model_res.replace('```', '')
+            start = model_res.find('{')
+            end = model_res.rfind('}')
+
+            if start != -1 and end != -1:
+                key_fact = model_res[start:end+1]
+                key_facts_content = json.loads(key_fact)
+                key_facts = key_facts_content['key facts']
+
             else:
                 key_facts = []
                 raise Exception("Key facts not found in generated text")
@@ -207,6 +223,7 @@ def generate_keyfact_api(task_name, selected_dataset, prompt_template, api_url, 
             result_data = {
                 "record_index": i,
                 "success": True,
+                "model_output": generated_text,
                 "key_facts": key_facts
             }
 
@@ -217,6 +234,7 @@ def generate_keyfact_api(task_name, selected_dataset, prompt_template, api_url, 
             result_data = {
                 "record_index": i,
                 "success": False,
+                "model_output": generated_text,
                 "key_facts": []
             }
 

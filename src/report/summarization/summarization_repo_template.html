@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BERTScore Evaluation Report</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        .container {
+            max-width: 1200px;
+            width: 100%;
+            padding: 20px;
+        }
+
+        h1, h2, h3 {
+            color: #007bff;
+            margin-top: 20px;
+            margin-bottom: 20px;
+        }
+
+        .display-6 {
+            font-size: 30px;
+        }
+
+        .divider {
+            border-top: 2px solid #007bff;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+<div class="container mt-5">
+    <h1 style="text-align: center">Summarization Evaluation Report</h1>
+    <p style="text-align: center">Task name: {{task_name_placeholder}}</p>
+    <p style="text-align: center">Generated time: {{generated_time}}</p>
+    <h2>Summaries Report</h2>
+    <div class="card">
+        <div class="row mt-4">
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Total Number</h5>
+                    <p id="summaries_total_number" class="display-6">{{summaries_total_number_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Success Number</h5>
+                    <p id="summaries_success_number" class="display-6">{{summaries_success_number_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Success Ratio</h5>
+                    <p id="summaries_success_ratio" class="display-6">{{summaries_success_ratio_placeholder}}</p>
+                </div>
+            </div>
+        </div>
+        <div class="row mt-4">
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Average Summary Length</h5>
+                    <p id="summaries_average_summary_length" class="display-6">
+                        {{summaries_average_summary_length_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Max Summary Length</h5>
+                    <p id="summaries_max_summary_length" class="display-6">
+                        {{summaries_max_summary_length_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Min Summary Length</h5>
+                    <p id="summaries_min_summary_length" class="display-6">
+                        {{summaries_min_summary_length_placeholder}}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <h2>LLM Based Judgement</h2>
+    <h3>LLM score</h3>
+    <div class="card">
+        <div class="row mt-4">
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Faithfulness</h5>
+                    <p id="llm_faithfulness_score" class="display-6">{{llm_faithfulness_score_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Completeness</h5>
+                    <p id="llm_completeness_score" class="display-6">{{llm_completeness_score_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Concisenesse</h5>
+                    <p id="llm_conciseness_score" class="display-6">{{llm_conciseness_score_placeholder}}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <h3>Keyfact Alignment Report</h3>
+    <div class="card">
+        <div class="row mt-4">
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Total Number</h5>
+                    <p id="keyfact_alignment_total_number" class="display-6">
+                        {{keyfact_alignment_total_number_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Success Number</h5>
+                    <p id="keyfact_alignment_success_number" class="display-6">
+                        {{keyfact_alignment_success_number_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Success Ratio</h5>
+                    <p id="keyfact_alignment_success_ratio" class="display-6">
+                        {{keyfact_alignment_success_ratio_placeholder}}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Total Pred Labels</h5>
+                    <p id="keyfact_alignment_total_pred_labels" class="display-6">
+                        {{keyfact_alignment_total_pred_labels_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Pred Labels 1 Count</h5>
+                    <p id="keyfact_alignment_pred_labels_1_count" class="display-6">
+                        {{keyfact_alignment_pred_labels_1_count_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Pred Labels 1 Ratio</h5>
+                    <p id="keyfact_alignment_pred_labels_1_ratio" class="display-6">
+                        {{keyfact_alignment_pred_labels_1_ratio_placeholder}}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <h3>Keyfact Check Report</h3>
+    <div class="card">
+        <div class="row mt-4">
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Total Number</h5>
+                    <p id="keyfact_check_total_number" class="display-6">{{keyfact_check_total_number_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Success Number</h5>
+                    <p id="keyfact_check_success_number" class="display-6">
+                        {{keyfact_check_success_number_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Success Ratio</h5>
+                    <p id="keyfact_check_success_ratio" class="display-6">
+                        {{keyfact_check_success_ratio_placeholder}}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Total Predicted Labels</h5>
+                    <p id="keyfact_check_total_pred_labels" class="display-6">
+                        {{keyfact_check_total_pred_labels_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Fact Correct Labels Count</h5>
+                    <p id="keyfact_check_fact_correct_labels_count" class="display-6">
+                        {{keyfact_check_fact_correct_labels_count_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Fact Correct Labels Ratio</h5>
+                    <p id="keyfact_check_fact_correct_labels_ratio" class="display-6">
+                        {{keyfact_check_fact_correct_labels_ratio_placeholder}}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <h2>Similarity Based Judgement</h2>
+    <h3>BERTScore Evaluation Report</h3>
+    <div class="card">
+        <div class="row mt-4">
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Total Number</h5>
+                    <p id="bertscore_total_number" class="display-6">{{bertscore_total_number_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Success Number</h5>
+                    <p id="bertscore_success_number" class="display-6">{{bertscore_success_number_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Success Ratio</h5>
+                    <p id="bertscore_success_ratio" class="display-6">{{bertscore_success_ratio_placeholder}}</p>
+                </div>
+            </div>
+        </div>
+        <div class="row mt-4">
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Average F1 Score</h5>
+                    <p id="bertscore_average_score" class="display-6">{{bertscore_average_score_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Max F1 Score</h5>
+                    <p id="bertscore_max_score" class="display-6">{{bertscore_max_score_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Min F1 Score</h5>
+                    <p id="bertscore_min_score" class="display-6">{{bertscore_min_score_placeholder}}</p>
+                </div>
+            </div>
+        </div>
+        <div class="row mt-4">
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Average Precision</h5>
+                    <p id="bertscore_average_precision" class="display-6">
+                        {{bertscore_average_precision_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Max Precision</h5>
+                    <p id="bertscore_max_precision" class="display-6">{{bertscore_max_precision_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Min Precision</h5>
+                    <p id="bertscore_min_precision" class="display-6">{{bertscore_min_precision_placeholder}}</p>
+                </div>
+            </div>
+        </div>
+        <div class="row mt-4">
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Average Recall</h5>
+                    <p id="bertscore_average_recall" class="display-6">{{bertscore_average_recall_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Max Recall</h5>
+                    <p id="bertscore_max_recall" class="display-6">{{bertscore_max_recall_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Min Recall</h5>
+                    <p id="bertscore_min_recall" class="display-6">{{bertscore_min_recall_placeholder}}</p>
+                </div>
+            </div>
+        </div>
+        <div class="row mt-4">
+            <div class="col text-center">
+                <h3>BERTScore Distribution</h3>
+                <canvas id="bertscore_hist_chart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <h3>BLEURT Evaluation Report</h3>
+    <div class="card">
+        <div class="row mt-4">
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Total Number</h5>
+                    <p id="bleurt_total_number" class="display-6">{{bleurt_total_number_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Success Number</h5>
+                    <p id="bleurt_success_number" class="display-6">{{bleurt_success_number_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Success Ratio</h5>
+                    <p id="bleurt_success_ratio" class="display-6">{{bleurt_success_ratio_placeholder}}</p>
+                </div>
+            </div>
+        </div>
+        <div class="row mt-4">
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Average Score</h5>
+                    <p id="bleurt_average_score" class="display-6">{{bleurt_average_score_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Max Score</h5>
+                    <p id="bleurt_max_score" class="display-6">{{bleurt_max_score_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Min Score</h5>
+                    <p id="bleurt_min_score" class="display-6">{{bleurt_min_score_placeholder}}</p>
+                </div>
+            </div>
+        </div>
+        <div class="row mt-4">
+            <div class="col text-center">
+                <div class="col">
+                    <h5>BLEURT Score Distribution</h5>
+                    <canvas id="bleurt_hist_chart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <h3>ROUGE Report</h3>
+    <div class="card">
+        <div class="row mt-4">
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Total Number</h5>
+                    <p id="rouge_total_number" class="display-6">{{rouge_total_number_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Success Number</h5>
+                    <p id="rouge_success_number" class="display-6">{{rouge_success_number_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Success Ratio</h5>
+                    <p id="rouge_success_ratio" class="display-6">{{rouge_success_ratio_placeholder}}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Average ROUGE-1 F</h5>
+                    <p id="rouge_average_rouge_1_f" class="display-6">{{rouge_average_rouge_1_f_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Max ROUGE-1 F</h5>
+                    <p id="rouge_max_rouge_1_f" class="display-6">{{rouge_max_rouge_1_f_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Min ROUGE-1 F</h5>
+                    <p id="rouge_min_rouge_1_f" class="display-6">{{rouge_min_rouge_1_f_placeholder}}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Average ROUGE-1 P</h5>
+                    <p id="rouge_average_rouge_1_p" class="display-6">{{rouge_average_rouge_1_p_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Max ROUGE-1 P</h5>
+                    <p id="rouge_max_rouge_1_p" class="display-6">{{rouge_max_rouge_1_p_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Min ROUGE-1 P</h5>
+                    <p id="rouge_min_rouge_1_p" class="display-6">{{rouge_min_rouge_1_p_placeholder}}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Average ROUGE-1 R</h5>
+                    <p id="rouge_average_rouge_1_r" class="display-6">{{rouge_average_rouge_1_r_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Max ROUGE-1 R</h5>
+                    <p id="rouge_max_rouge_1_r" class="display-6">{{rouge_max_rouge_1_r_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Min ROUGE-1 R</h5>
+                    <p id="rouge_min_rouge_1_r" class="display-6">{{rouge_min_rouge_1_r_placeholder}}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Average ROUGE-2 F</h5>
+                    <p id="rouge_average_rouge_2_f" class="display-6">{{rouge_average_rouge_2_f_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Max ROUGE-2 F</h5>
+                    <p id="rouge_max_rouge_2_f" class="display-6">{{rouge_max_rouge_2_f_placeholder}}</p>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Min ROUGE-2 F</h5>
+                    <p id="rouge_min_rouge_2_f" class="display-6">{{rouge_min_rouge_2_f_placeholder}}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Average ROUGE-2 P</h5>
+                    <p id="rouge_average_rouge_2_p" class="display-6">{{rouge_average_rouge_2_p_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Max ROUGE-2 P</h5>
+                    <p id="rouge_max_rouge_2_p" class="display-6">{{rouge_max_rouge_2_p_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Min ROUGE-2 P</h5>
+                    <p id="rouge_min_rouge_2_p" class="display-6">{{rouge_min_rouge_2_p_placeholder}}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Average ROUGE-2 R</h5>
+                    <p id="rouge_average_rouge_2_r" class="display-6">{{rouge_average_rouge_2_r_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Max ROUGE-2 R</h5>
+                    <p id="rouge_max_rouge_2_r" class="display-6">{{rouge_max_rouge_2_r_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Min ROUGE-2 R</h5>
+                    <p id="rouge_min_rouge_2_r" class="display-6">{{rouge_min_rouge_2_r_placeholder}}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Average ROUGE-L F</h5>
+                    <p id="rouge_average_rouge_l_f" class="display-6">{{rouge_average_rouge_l_f_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Max ROUGE-L F</h5>
+                    <p id="rouge_max_rouge_l_f" class="display-6">{{rouge_max_rouge_l_f_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Min ROUGE-L F</h5>
+                    <p id="rouge_min_rouge_l_f" class="display-6">{{rouge_min_rouge_l_f_placeholder}}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Average ROUGE-L P</h5>
+                    <p id="rouge_average_rouge_l_p" class="display-6">{{rouge_average_rouge_l_p_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Max ROUGE-L P</h5>
+                    <p id="rouge_max_rouge_l_p" class="display-6">{{rouge_max_rouge_l_p_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Min ROUGE-L P</h5>
+                    <p id="rouge_min_rouge_l_p" class="display-6">{{rouge_min_rouge_l_p_placeholder}}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Average ROUGE-L R</h5>
+                    <p id="rouge_average_rouge_l_r" class="display-6">{{rouge_average_rouge_l_r_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Max ROUGE-L R</h5>
+                    <p id="rouge_max_rouge_l_r" class="display-6">{{rouge_max_rouge_l_r_placeholder}}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3">
+                    <h5>Min ROUGE-L R</h5>
+                    <p id="rouge_min_rouge_l_r" class="display-6">{{rouge_min_rouge_l_r_placeholder}}</p>
+                </div>
+            </div>
+        </div>
+        <div class="row mt-4">
+            <div class="col text-center">
+                <h3>ROUGE-1 Distribution</h3>
+                <canvas id="rouge_1_hist_chart"></canvas>
+            </div>
+        </div>
+        <div class="row mt-4">
+            <div class="col text-center">
+                <h3>ROUGE-2 Distribution</h3>
+                <canvas id="rouge_2_hist_chart"></canvas>
+            </div>
+        </div>
+        <div class="row mt-4">
+            <div class="col text-center">
+                <h3>ROUGE-L Distribution</h3>
+                <canvas id="rouge_l_hist_chart"></canvas>
+            </div>
+        </div>
+    </div>
+
+
+</div>
+</body>
+</html>
