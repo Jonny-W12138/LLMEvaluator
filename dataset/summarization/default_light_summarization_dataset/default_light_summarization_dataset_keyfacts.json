@@ -1,6 +1,8 @@
 {
     "metadata": {
-        "model_source": "Model",
+        "model_source": "API",
+        "model_engine": "deepseek-v3",
+        "api_url": "https://qianfan.baidubce.com/v2",
         "total_data_num": 2,
         "success_num": 2,
         "failed_num": 0,
@@ -20,29 +22,35 @@
                 "1": "Ref Summary"
             }
         },
-        "adapter_path": null,
-        "max_tokens": 400,
-        "temperature": 0.0,
+        "max_tokens": 800,
+        "temperature": 0.01,
         "top_p": 1.0
     },
     "results": [
         {
             "record_index": 0,
             "success": true,
+            "model_output": "```json{  \"key facts\": [    \"China's Shanghai Stock Exchange met with eight foreign institutions.\",    \"The meeting focused on optimizing stock connect programs.\",    \"The meeting discussed the qualified foreign institutional investors mechanism.\",    \"The goal was to provide easier access for foreign investors.\",    \"Foreign investors are interested in the A-share market.\",    \"The meeting aimed to promote high-quality development of the Chinese capital market.\"  ]}```",
             "key_facts": [
-                "China's Shanghai Stock Exchange",
-                "foreign institutions",
-                "qualified foreign institutional investors mechanism"
+                "China's Shanghai Stock Exchange met with eight foreign institutions.",
+                "The meeting focused on optimizing stock connect programs.",
+                "The meeting discussed the qualified foreign institutional investors mechanism.",
+                "The goal was to provide easier access for foreign investors.",
+                "Foreign investors are interested in the A-share market.",
+                "The meeting aimed to promote high-quality development of the Chinese capital market."
             ]
         },
         {
             "record_index": 1,
             "success": true,
+            "model_output": "```json{  \"key facts\": [    \"The panda bond market involves overseas institutions issuing renminbi bonds in China's onshore market.\",    \"The panda bond market posted record-high issuances by value this year.\",    \"The panda bond market is poised to attract new issuers in 2025.\",    \"New issuers in 2025 may include those from the Middle East and Latin America.\",    \"The issuance total in the panda bond market was up 26% year-on-year.\",    \"The 26% year-on-year increase in issuance total is a record high.\"  ]}```",
             "key_facts": [
-                "The panda bond market posted record-high issuances by value this year",
-                "The issuance total was up 26% year-on-year",
-                "The market is poised to attract new issuers",
-                "including those from the Middle East and Latin America"
+                "The panda bond market involves overseas institutions issuing renminbi bonds in China's onshore market.",
+                "The panda bond market posted record-high issuances by value this year.",
+                "The panda bond market is poised to attract new issuers in 2025.",
+                "New issuers in 2025 may include those from the Middle East and Latin America.",
+                "The issuance total in the panda bond market was up 26% year-on-year.",
+                "The 26% year-on-year increase in issuance total is a record high."
             ]
         }
     ]
