@@ -1,0 +1,16 @@
+{
+  "trip": {
+    "root_path": "dataset/planning/trip",
+    "cities_path": "dataset/planning/trip/trip_cities.json",
+    "trip_data_folder": "dataset/planning/trip/trip_data"
+  },
+  "meeting": {
+    "root_path": "dataset/planning/meeting",
+    "cities_path": "dataset/planning/meeting/meeting_cities.json",
+    "meeting_data_folder": "dataset/planning/meeting/meeting_data"
+  },
+  "calender": {
+    "root_path": "dataset/planning/calender",
+    "calender_data_folder": "dataset/planning/calender"
+  }
+}

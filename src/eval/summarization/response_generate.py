@@ -5,12 +5,9 @@ import json
 import pandas as pd
 import torch
 from openai import OpenAI
-from streamlit import success
 from transformers import pipeline, AutoModelForCausalLM, AutoTokenizer
 from peft import PeftModel, PeftConfig
 import streamlit as st
-import openai
-import re
 
 
 # 模拟子进程逻辑（实际情况下替换为大模型调用逻辑）

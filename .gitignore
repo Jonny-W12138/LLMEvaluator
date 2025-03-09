@@ -183,6 +183,8 @@ models/tool_model/*
 
 dataset/*
 !dataset/summarization/.gitkeep
+!dataset/planning/calender/.gitkeep
+
 
 tasks/*
 !tasks/.gitkeep

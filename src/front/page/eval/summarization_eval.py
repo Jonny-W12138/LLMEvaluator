@@ -19,7 +19,7 @@ import json
 import pandas as pd
 import time
 
-st.header("Summarization Evaluate")
+st.header("Summarization Evaluation")
 
 # 任务选择
 with st.container(border=True):
