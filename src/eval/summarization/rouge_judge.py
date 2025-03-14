@@ -8,7 +8,7 @@ import torch
 
 def rouge_judge(summary_file_path, task, field_mapping, selected_data_path):
 
-    with st.status("ROUGE judging...", expanded=True) as status:
+    with (st.status("ROUGE judging...", expanded=True) as status):
         st.write("Checking the input data...")
 
         if (field_mapping["Field Type"] == "Ref Summary").sum() != 1 \
@@ -34,6 +34,7 @@ def rouge_judge(summary_file_path, task, field_mapping, selected_data_path):
 
         summaries_to_judge_list = []
         ref_summaries_list = []
+        categories = []
         valid_indices = []
 
         total_num = ref_summaries.shape[0]
@@ -47,6 +48,7 @@ def rouge_judge(summary_file_path, task, field_mapping, selected_data_path):
                 summaries_to_judge_list.append(summary.strip())
                 ref_summaries_list.append(ref.strip())
                 valid_indices.append(i)
+                categories.append(ref_summaries["category"].iloc[i])
 
         st.write(f"Valid summaries: {len(valid_indices)}/{total_num}")
 
@@ -84,6 +86,7 @@ def rouge_judge(summary_file_path, task, field_mapping, selected_data_path):
                 results.append({
                     "ref_summary": ref_summaries[ref_summary_field].iloc[i],
                     "summary": summaries_to_judge.iloc[i]["summary"],
+                    "category": categories[i],
                     "rouge-1-f": rouge_1_f,
                     "rouge-1-p": rouge_1_p,
                     "rouge-1-r": rouge_1_r,
@@ -99,6 +102,7 @@ def rouge_judge(summary_file_path, task, field_mapping, selected_data_path):
                 results.append({
                     "ref_summary": ref_summaries[ref_summary_field].iloc[i],
                     "summary": summaries_to_judge.iloc[i]["summary"],
+                    "category": categories[i],
                     "rouge-1-f": None,
                     "rouge-1-p": None,
                     "rouge-1-r": None,
@@ -112,7 +116,9 @@ def rouge_judge(summary_file_path, task, field_mapping, selected_data_path):
                 })
 
         current_time = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-        output_file = os.path.join(os.getcwd(), "tasks", f"{task}", "summarization", f"rouge_results_{current_time}.json")
+        os.makedirs(os.path.join(os.getcwd(), "tasks", f"{task}", "summarization", "evaluation", "rouge_results"), exist_ok=True)
+        output_file = os.path.join(os.getcwd(), "tasks", f"{task}", "summarization", "evaluation", "rouge_results",
+                                   f"rouge_results_{current_time}.json")
 
         with open(output_file, "w", encoding="utf-8") as f:
             json.dump(results, f, indent=4)

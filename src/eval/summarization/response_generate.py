@@ -63,10 +63,11 @@ def generate_summaries_model(task_name, selected_data_path, model_path, prompt_t
     success_num = 0
 
     for i in range(total_data_num):
-        transcript = ""
         model_output = ""
+        current_row = dataset.iloc[i]
+        category = current_row['category']
+        transcript = current_row[transcript_field]
         try:
-            current_row = dataset.iloc[i]
             prompt = prompt_template
             # 替换提示模板中的占位符
             for _, row in field_mapping.iterrows():
@@ -119,12 +120,12 @@ def generate_summaries_model(task_name, selected_data_path, model_path, prompt_t
             summary_context = json.loads(summary)
             summary = summary_context['summary']
 
-            transcript = current_row[transcript_field]
 
             # 构造成功的结果数据
             result_data = {
                 "record_index": i,
                 "success": True,
+                "category": category,
                 "transcript": transcript,
                 "model_output": model_output,
                 "summary": summary
@@ -137,6 +138,7 @@ def generate_summaries_model(task_name, selected_data_path, model_path, prompt_t
             result_data = {
                 "record_index": i,
                 "success": False,
+                "category": category,
                 "transcript": transcript,
                 "model_output": model_output,
                 "summary": ""
@@ -153,7 +155,7 @@ def generate_summaries_model(task_name, selected_data_path, model_path, prompt_t
 
     current_time = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
-    save_dir = os.path.join(os.getcwd(), "tasks", task_name, "summarization")
+    save_dir = os.path.join(os.getcwd(), "tasks", task_name, "summarization", "response")
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
 
@@ -213,7 +215,7 @@ def generate_summaries_api(task_name, selected_data_path, prompt_template, api_u
 
     # 生成文件路径
     current_time = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    save_dir = os.path.join(os.getcwd(), "tasks", task_name, "summarization")
+    save_dir = os.path.join(os.getcwd(), "tasks", task_name, "summarization", "response")
     os.makedirs(save_dir, exist_ok=True)
     output_file = os.path.join(save_dir, f"summaries_{current_time}.json")
 
@@ -237,12 +239,12 @@ def generate_summaries_api(task_name, selected_data_path, prompt_template, api_u
             json.dump({"metadata": metadata, "results": []}, f, indent=4)
 
     for i in range(total_data_num):
-        transcript = ""
         generated_text = ""
-        try:
-            current_row = dataset.iloc[i]
-            transcript = current_row[transcript_field]
+        current_row = dataset.iloc[i]
+        category = current_row['category']
+        transcript = current_row[transcript_field]
 
+        try:
             prompt = prompt_template
             for _, row in field_mapping.iterrows():
                 dataset_field = row["Dataset Field"]
@@ -278,6 +280,7 @@ def generate_summaries_api(task_name, selected_data_path, prompt_template, api_u
             result_data = {
                 "record_index": i,
                 "success": True,
+                "category": category,
                 "transcript": transcript,
                 "model_output": generated_text,
                 "summary": summary
@@ -289,6 +292,7 @@ def generate_summaries_api(task_name, selected_data_path, prompt_template, api_u
             result_data = {
                 "record_index": i,
                 "success": False,
+                "category": category,
                 "transcript": transcript,
                 "model_output": generated_text,
                 "summary": ""

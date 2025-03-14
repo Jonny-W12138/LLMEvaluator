@@ -17,7 +17,6 @@ from src.eval.summarization.bleurt_judge import bleurt_judge
 from src.eval.summarization.rouge_judge import rouge_judge
 import json
 import pandas as pd
-import time
 
 st.header("Summarization Evaluation")
 
@@ -41,11 +40,16 @@ with st.container(border=True):
                     task = input_task
                     if task is not None or task != "":
                         st.session_state["task"] = task
+                        os.makedirs(os.path.join(os.getcwd(), "tasks", input_task, "summarization", "response"), exist_ok=True)
+                        os.makedirs(os.path.join(os.getcwd(), "tasks", input_task, "summarization", "evaluation"), exist_ok=True)
     else:
         task = st.selectbox("Task name", os.listdir(os.path.join(os.getcwd(), "tasks")))
         if st.button("Select", key="select_task"):
             if task is not None or task != "":
                 st.session_state["task"] = task
+                os.makedirs(os.path.join(os.getcwd(), "tasks", task, "summarization", "response"), exist_ok=True)
+                os.makedirs(os.path.join(os.getcwd(), "tasks", task, "summarization", "evaluation"), exist_ok=True)
+
 
 # 模型选择
 with st.container(border=True):
@@ -381,52 +385,54 @@ Summary:
             summary_files = []
             st.info("Please select a task first.")
         else:
-            summary_files = os.listdir(os.path.join(os.getcwd(), "tasks", st.session_state["task"], "summarization"))
+            summary_files = os.listdir(os.path.join(os.getcwd(), "tasks", st.session_state["task"], "summarization", "response"))
             summary_files = [file for file in summary_files if file.startswith("summaries_")]
             selected_summary_file = st.selectbox("Summary file", summary_files)
 
-            selected_summary_file_path = os.path.join(os.getcwd(), "tasks", st.session_state["task"], "summarization", selected_summary_file)
+            if selected_summary_file is not None:
 
-            max_token_col, temperature_col, top_p_col = st.columns(3)
-            with max_token_col:
-                max_tokens = st.number_input("Max tokens", value=1200, min_value=1,key="llm_judge_max_tokens")
-            with temperature_col:
-                temperature = st.number_input("Temperature",
-                                              value=0.0, min_value=0.0, max_value=1.0, step=0.1, key="llm_judge_temperature")
-            with top_p_col:
-                top_p = st.number_input("Top p", value=1.0, min_value=0.0, max_value=1.0, step=0.1, key="llm_judge_top_p")
+                selected_summary_file_path = os.path.join(os.getcwd(), "tasks", st.session_state["task"], "summarization", "response",selected_summary_file)
 
-            if st.button("Judge", key="llm_judge_fact_check_button"):
-                if judge_model_source != "API":
-                    kwargs = {
-                        "model_path": llm_model_path,
-                        "selected_dataset": st.session_state["selected_dataset"],
-                        "selected_summary_file_path": selected_summary_file_path,
-                        "task_name": st.session_state["task"],
-                        "prompt_template": judge_template,
-                        "field_mapping": pd.DataFrame(st.session_state["field_mapping"]),
-                        "max_tokens": max_tokens,
-                        "temperature": temperature,
-                        "top_p": top_p
-                    }
+                max_token_col, temperature_col, top_p_col = st.columns(3)
+                with max_token_col:
+                    max_tokens = st.number_input("Max tokens", value=1200, min_value=1,key="llm_judge_max_tokens")
+                with temperature_col:
+                    temperature = st.number_input("Temperature",
+                                                  value=0.0, min_value=0.0, max_value=1.0, step=0.1, key="llm_judge_temperature")
+                with top_p_col:
+                    top_p = st.number_input("Top p", value=1.0, min_value=0.0, max_value=1.0, step=0.1, key="llm_judge_top_p")
 
-                    if llm_judge_use_adapter and adapter_path.strip():
-                        kwargs["adapter_path"] = adapter_path
-                    llm_fact_checking_judge_model(**kwargs)
-                else:
-                    llm_fact_checking_judge_api(
-                        task_name=st.session_state["task"],
-                        selected_dataset=st.session_state["selected_dataset"],
-                        prompt_template=judge_template,
-                        selected_summary_file_path=selected_summary_file_path,
-                        api_url=api_url,
-                        api_key=api_key,
-                        model_engine=model_engine,
-                        field_mapping=pd.DataFrame(st.session_state["field_mapping"]),
-                        max_tokens=max_tokens,
-                        temperature=temperature,
-                        top_p=top_p
-                    )
+                if st.button("Judge", key="llm_judge_fact_check_button"):
+                    if judge_model_source != "API":
+                        kwargs = {
+                            "model_path": llm_model_path,
+                            "selected_dataset": st.session_state["selected_dataset"],
+                            "selected_summary_file_path": selected_summary_file_path,
+                            "task_name": st.session_state["task"],
+                            "prompt_template": judge_template,
+                            "field_mapping": pd.DataFrame(st.session_state["field_mapping"]),
+                            "max_tokens": max_tokens,
+                            "temperature": temperature,
+                            "top_p": top_p
+                        }
+
+                        if llm_judge_use_adapter and adapter_path.strip():
+                            kwargs["adapter_path"] = adapter_path
+                        llm_fact_checking_judge_model(**kwargs)
+                    else:
+                        llm_fact_checking_judge_api(
+                            task_name=st.session_state["task"],
+                            selected_dataset=st.session_state["selected_dataset"],
+                            prompt_template=judge_template,
+                            selected_summary_file_path=selected_summary_file_path,
+                            api_url=api_url,
+                            api_key=api_key,
+                            model_engine=model_engine,
+                            field_mapping=pd.DataFrame(st.session_state["field_mapping"]),
+                            max_tokens=max_tokens,
+                            temperature=temperature,
+                            top_p=top_p
+                        )
 
 
         st.divider()
@@ -484,54 +490,55 @@ key facts:
             summary_files = []
             st.info("Please select a task first.")
         else:
-            summary_files = os.listdir(os.path.join(os.getcwd(), "tasks", st.session_state["task"], "summarization"))
+            summary_files = os.listdir(os.path.join(os.getcwd(), "tasks", st.session_state["task"], "summarization", "response"))
 
             summary_files = [file for file in summary_files if file.startswith("summaries_")]
 
             selected_summary_file = st.selectbox("Summary file", summary_files, key="llm_judge_selected_summary_file_fact_alignment")
 
-            selected_summary_file_path = os.path.join(os.getcwd(), "tasks", st.session_state["task"], "summarization", selected_summary_file)
+            if selected_summary_file is not None:
+                selected_summary_file_path = os.path.join(os.getcwd(), "tasks", st.session_state["task"], "summarization", "response", selected_summary_file)
 
-            max_token_col, temperature_col, top_p_col = st.columns(3)
-            with max_token_col:
-                max_tokens = st.number_input("Max tokens", value=400, min_value=1, key="llm_judge_max_tokens_fact_alignment")
-            with temperature_col:
-                temperature = st.number_input("Temperature",
-                                              value=0.0, min_value=0.0, max_value=1.0, step=0.1, key="llm_judge_temperature_fact_alignment")
-            with top_p_col:
-                top_p = st.number_input("Top p", value=1.0, min_value=0.0, max_value=1.0, step=0.1, key="llm_judge_top_p_fact_alignment")
+                max_token_col, temperature_col, top_p_col = st.columns(3)
+                with max_token_col:
+                    max_tokens = st.number_input("Max tokens", value=400, min_value=1, key="llm_judge_max_tokens_fact_alignment")
+                with temperature_col:
+                    temperature = st.number_input("Temperature",
+                                                  value=0.0, min_value=0.0, max_value=1.0, step=0.1, key="llm_judge_temperature_fact_alignment")
+                with top_p_col:
+                    top_p = st.number_input("Top p", value=1.0, min_value=0.0, max_value=1.0, step=0.1, key="llm_judge_top_p_fact_alignment")
 
-            if st.button("Judge", key="llm_judge_fact_alignment_button"):
-                if judge_model_source != "API":
-                    kwargs = {
-                        "model_path": llm_model_path,
-                        "selected_dataset": st.session_state["selected_dataset"],
-                        "task_name": st.session_state["task"],
-                        "prompt_template": judge_template,
-                        "selected_summary_file_path": selected_summary_file_path,
-                        "field_mapping": pd.DataFrame(st.session_state["field_mapping"]),
-                        "max_tokens": max_tokens,
-                        "temperature": temperature,
-                        "top_p": top_p
-                    }
+                if st.button("Judge", key="llm_judge_fact_alignment_button"):
+                    if judge_model_source != "API":
+                        kwargs = {
+                            "model_path": llm_model_path,
+                            "selected_dataset": st.session_state["selected_dataset"],
+                            "task_name": st.session_state["task"],
+                            "prompt_template": judge_template,
+                            "selected_summary_file_path": selected_summary_file_path,
+                            "field_mapping": pd.DataFrame(st.session_state["field_mapping"]),
+                            "max_tokens": max_tokens,
+                            "temperature": temperature,
+                            "top_p": top_p
+                        }
 
-                    if llm_judge_use_adapter and adapter_path.strip():
-                        kwargs["adapter_path"] = adapter_path
-                    llm_fact_alignment_judge_model(**kwargs)
-                else:
-                    llm_fact_alignment_judge_api(
-                        task_name=st.session_state["task"],
-                        selected_dataset=st.session_state["selected_dataset"],
-                        prompt_template=judge_template,
-                        selected_summary_file_path=selected_summary_file_path,
-                        api_url=api_url,
-                        api_key=api_key,
-                        model_engine=model_engine,
-                        field_mapping=pd.DataFrame(st.session_state["field_mapping"]),
-                        max_tokens=max_tokens,
-                        temperature=temperature,
-                        top_p=top_p
-                    )
+                        if llm_judge_use_adapter and adapter_path.strip():
+                            kwargs["adapter_path"] = adapter_path
+                        llm_fact_alignment_judge_model(**kwargs)
+                    else:
+                        llm_fact_alignment_judge_api(
+                            task_name=st.session_state["task"],
+                            selected_dataset=st.session_state["selected_dataset"],
+                            prompt_template=judge_template,
+                            selected_summary_file_path=selected_summary_file_path,
+                            api_url=api_url,
+                            api_key=api_key,
+                            model_engine=model_engine,
+                            field_mapping=pd.DataFrame(st.session_state["field_mapping"]),
+                            max_tokens=max_tokens,
+                            temperature=temperature,
+                            top_p=top_p
+                        )
 
         st.divider()
         st.write("Parse and Score")
@@ -539,19 +546,19 @@ key facts:
             st.info("Please select a task first.")
 
         else:
-            keyfact_check_files = os.listdir(os.path.join(os.getcwd(), "tasks", st.session_state["task"], "summarization"))
+            keyfact_check_files = os.listdir(os.path.join(os.getcwd(), "tasks", st.session_state["task"], "summarization", "evaluation", "llm_judge", "keyfact_check"))
             keyfact_check_files = [file for file in keyfact_check_files if file.startswith("keyfact_check")]
             selected_keyfact_check_file = st.selectbox("Keyfact check file", keyfact_check_files)
 
-            keyfact_alignment_files = os.listdir(os.path.join(os.getcwd(), "tasks", st.session_state["task"], "summarization"))
+            keyfact_alignment_files = os.listdir(os.path.join(os.getcwd(), "tasks", st.session_state["task"], "summarization", "evaluation", "llm_judge","keyfact_alignment"))
             keyfact_alignment_files = [file for file in keyfact_alignment_files if file.startswith("keyfact_alignment")]
             selected_keyfact_alignment_file = st.selectbox("Keyfact alignment file", keyfact_alignment_files)
 
             if st.button("Parse and Score"):
                 parse_score(
                     st.session_state["task"],
-                    os.path.join(os.getcwd(), "tasks", st.session_state["task"], "summarization", selected_keyfact_check_file),
-                    os.path.join(os.getcwd(), "tasks", st.session_state["task"], "summarization", selected_keyfact_alignment_file)
+                    os.path.join(os.getcwd(), "tasks", st.session_state["task"], "summarization", "evaluation", "llm_judge","keyfact_check", selected_keyfact_check_file),
+                    os.path.join(os.getcwd(), "tasks", st.session_state["task"], "summarization", "evaluation", "llm_judge","keyfact_alignment", selected_keyfact_alignment_file)
                 )
     with bert_tab:
         use_custom_cli = st.toggle("Custom cli", value=False)
@@ -580,23 +587,24 @@ key facts:
                 st.info("Please select a task first.")
 
             else:
-                summary_files = os.listdir(os.path.join(os.getcwd(), "tasks", st.session_state["task"], "summarization"))
+                summary_files = os.listdir(os.path.join(os.getcwd(), "tasks", st.session_state["task"], "summarization", "response"))
 
                 summary_files = [file for file in summary_files if file.startswith("summaries_")]
                 selected_summary_file = st.selectbox("Summary file", summary_files, key="selected_summary_file_bert")
 
-                selected_summary_file_path = os.path.join(os.getcwd(), "tasks", st.session_state["task"], "summarization", selected_summary_file)
+                if selected_summary_file is not None:
+                    selected_summary_file_path = os.path.join(os.getcwd(), "tasks", st.session_state["task"], "summarization", "response", selected_summary_file)
 
-                if st.button("Evaluate"):
-                    bert_judge(
-                        bert_model=judge_model_source,
-                        lang=language,
-                        num_layers=num_layers,
-                        summary_file_path=selected_summary_file_path,
-                        task=st.session_state["task"],
-                        field_mapping=pd.DataFrame(st.session_state["field_mapping"]),
-                        selected_data_path=os.path.join(os.getcwd(), datasets[st.session_state["selected_dataset"]]['data_path'])
-                    )
+                    if st.button("Evaluate"):
+                        bert_judge(
+                            bert_model=judge_model_source,
+                            lang=language,
+                            num_layers=num_layers,
+                            summary_file_path=selected_summary_file_path,
+                            task=st.session_state["task"],
+                            field_mapping=pd.DataFrame(st.session_state["field_mapping"]),
+                            selected_data_path=os.path.join(os.getcwd(), datasets[st.session_state["selected_dataset"]]['data_path'])
+                        )
 
         else:
             custom_cli = st.text_area("Command", height=200, key="custom_cli")
@@ -620,21 +628,22 @@ key facts:
                         "- See [here](https://github.com/google-research/bleurt/blob/master/checkpoints.md) for supported checkpoints")
 
                 with summary_files_col:
-                    summary_files = os.listdir(os.path.join(os.getcwd(), "tasks", st.session_state["task"], "summarization"))
+                    summary_files = os.listdir(os.path.join(os.getcwd(), "tasks", st.session_state["task"], "summarization", "response"))
 
                     summary_files = [file for file in summary_files if file.startswith("summaries_")]
                     selected_summary_file = st.selectbox("Summary file", summary_files, key="selected_summary_file_bleu")
 
-                    selected_summary_file_path = os.path.join(os.getcwd(), "tasks", st.session_state["task"], "summarization", selected_summary_file)
+                if selected_summary_file is not None:
+                    selected_summary_file_path = os.path.join(os.getcwd(), "tasks", st.session_state["task"], "summarization", "response", selected_summary_file)
 
-                if st.button("Evaluate", key="bleurt_judge_button"):
-                    bleurt_judge(
-                        bleurt_model=judge_model_source,
-                        summary_file_path=selected_summary_file_path,
-                        task=st.session_state["task"],
-                        field_mapping=pd.DataFrame(st.session_state["field_mapping"]),
-                        selected_data_path=os.path.join(os.getcwd(), datasets[st.session_state["selected_dataset"]]['data_path'])
-                    )
+                    if st.button("Evaluate", key="bleurt_judge_button"):
+                        bleurt_judge(
+                            bleurt_model=judge_model_source,
+                            summary_file_path=selected_summary_file_path,
+                            task=st.session_state["task"],
+                            field_mapping=pd.DataFrame(st.session_state["field_mapping"]),
+                            selected_data_path=os.path.join(os.getcwd(), datasets[st.session_state["selected_dataset"]]['data_path'])
+                        )
 
     with rouge_tab:
         use_custom_cli = st.toggle("Custom cli", value=False, key="use_custom_cli_rouge")
@@ -643,17 +652,18 @@ key facts:
                 summary_files = []
                 st.info("Please select a task first.")
             else:
-                summary_files = os.listdir(os.path.join(os.getcwd(), "tasks", st.session_state["task"], "summarization"))
+                summary_files = os.listdir(os.path.join(os.getcwd(), "tasks", st.session_state["task"], "summarization", "response"))
 
                 summary_files = [file for file in summary_files if file.startswith("summaries_")]
                 selected_summary_file = st.selectbox("Summary file", summary_files, key="selected_summary_file_rouge")
 
-                selected_summary_file_path = os.path.join(os.getcwd(), "tasks", st.session_state["task"], "summarization", selected_summary_file)
+                if selected_summary_file is not None:
+                    selected_summary_file_path = os.path.join(os.getcwd(), "tasks", st.session_state["task"], "summarization", "response", selected_summary_file)
 
-                if st.button("Evaluate", key="rouge_judge_button"):
-                    rouge_judge(
-                        summary_file_path=selected_summary_file_path,
-                        task=st.session_state["task"],
-                        field_mapping=pd.DataFrame(st.session_state["field_mapping"]),
-                        selected_data_path=os.path.join(os.getcwd(), datasets[st.session_state["selected_dataset"]]['data_path'])
-                    )
+                    if st.button("Evaluate", key="rouge_judge_button"):
+                        rouge_judge(
+                            summary_file_path=selected_summary_file_path,
+                            task=st.session_state["task"],
+                            field_mapping=pd.DataFrame(st.session_state["field_mapping"]),
+                            selected_data_path=os.path.join(os.getcwd(), datasets[st.session_state["selected_dataset"]]['data_path'])
+                        )

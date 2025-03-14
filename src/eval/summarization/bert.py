@@ -6,6 +6,8 @@ import json
 import pandas as pd
 import os
 
+from sympy.integrals.meijerint_doc import category
+
 
 def bert_judge(bert_model, lang, num_layers,
                summary_file_path, task, field_mapping, selected_data_path):
@@ -36,12 +38,14 @@ def bert_judge(bert_model, lang, num_layers,
 
         summaries_to_judge_list = []
         ref_summaries_list = []
+        categories = []
 
         total_num = ref_summaries.shape[0]
 
         for i in range(total_num):
             summaries_to_judge_list.append(summaries_to_judge.iloc[i]["summary"].replace("\n", ""))
             ref_summaries_list.append(ref_summaries[ref_summary_field].iloc[i])
+            categories.append(ref_summaries["category"].iloc[i])
 
         st.write("Evaluating summaries...")
 
@@ -74,13 +78,16 @@ def bert_judge(bert_model, lang, num_layers,
             results.append({
                 "summary": summaries_to_judge_list[i],
                 "ref_summary": ref_summaries_list[i],
+                "category": categories[i],
                 "bertscore_precision": P[i].item(),
                 "bertscore_recall": R[i].item(),
                 "bertscore_f1": F1[i].item()
             })
 
         current_time = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-        output_file = os.path.join(os.getcwd(), "tasks", f"{task}", "summarization", f"bertscore_results_{current_time}.json")
+        os.makedirs(os.path.join(os.getcwd(), "tasks", f"{task}", "summarization", "evaluation", "bertscore_results"), exist_ok=True)
+        output_file = os.path.join(os.getcwd(), "tasks", f"{task}", "summarization", "evaluation", "bertscore_results",
+                                   f"bertscore_results_{current_time}.json")
 
         with open(output_file, "w", encoding="utf-8") as f:
             json.dump(results, f, ensure_ascii=False, indent=4)

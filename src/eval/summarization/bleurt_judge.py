@@ -36,12 +36,14 @@ def bleurt_judge(bleurt_model, summary_file_path, task, field_mapping, selected_
 
         summaries_to_judge_list = []
         ref_summaries_list = []
+        categories = []
 
         total_num = ref_summaries.shape[0]
 
         for i in range(total_num):
             summaries_to_judge_list.append(summaries_to_judge.iloc[i]["summary"].replace("\n", ""))
             ref_summaries_list.append(ref_summaries[ref_summary_field].iloc[i])
+            categories.append(ref_summaries["category"].iloc[i])
 
         st.write("Evaluating summaries...")
 
@@ -59,11 +61,14 @@ def bleurt_judge(bleurt_model, summary_file_path, task, field_mapping, selected_
             results.append({
                 "ref_summary": ref_summaries_list[i],
                 "summary": summaries_to_judge_list[i],
+                "category": categories[i],
                 "score": scores[i]
             })
 
         current_time = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-        output_file = os.path.join(os.getcwd(), "tasks", f"{task}", "summarization", f"bleurt_results_{current_time}.json")
+        os.makedirs(os.path.join(os.getcwd(), "tasks", f"{task}", "summarization", "evaluation", "bleurt_results"), exist_ok=True)
+        output_file = os.path.join(os.getcwd(), "tasks", f"{task}", "summarization", "evaluation", "bleurt_results",
+                                   f"bleurt_results_{current_time}.json")
 
         with open(output_file, "w", encoding="utf-8") as f:
             json.dump(results, f, indent=4)

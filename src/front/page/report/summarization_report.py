@@ -4,14 +4,20 @@ import os
 import json
 import sys
 
-from nltk.metrics.aline import similarity_matrix
-
 root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../..'))
 # 将根目录添加到sys.path
 sys.path.append(root_dir)
 from src.report.summarization.report_generate \
     import init_template, generate_bertscore_report, generate_bleurt_report, generate_keyfact_alignment_report, generate_keyfact_check_report, generate_rouge_report, generate_summarization_report, generate_llm_score_report
-from src.report.summarization.results_render import bertscore_results_render, bleurt_results_render, keyfact_alignment_render, keyfact_check_render, llm_score_render, rouge_results_render, summaries_render
+
+
+from src.front.page.report.summarization.summaries import summaries_render, generate_summaries_html_report
+from src.front.page.report.summarization.llm_score import llm_score_render, generate_llm_score_html_report
+from src.front.page.report.summarization.keyfact_alignment import keyfact_alignment_render, generate_keyfact_alignment_html_report
+from src.front.page.report.summarization.keyfact_check import keyfact_check_render, generate_keyfact_check_html_report
+from src.front.page.report.summarization.rouge_results import rouge_results_render, generate_rouge_results_html_report
+from src.front.page.report.summarization.bertscore_results import bertscore_results_render, generate_bertscore_results_html_report
+from src.front.page.report.summarization.bleurt_results import bleurt_results_render, generate_bleurt_results_html_report
 
 render_functions = {
     "bertscore_results": bertscore_results_render,
@@ -41,26 +47,27 @@ with (st.container(border=True)):
             st.session_state["task"] = task
 
 if "task" in st.session_state:
-    task_dir = os.path.join(os.getcwd(), "tasks", st.session_state["task"], "summarization")
-    all_files = os.listdir(task_dir)
+    task_dir = os.path.join(os.getcwd(), "tasks", st.session_state["task"])
 
+    # 定义不同前缀对应的目录
+    prefix_dirs = {
+        "summaries": os.path.join(task_dir, "summarization", "response"),
+        "llm_score": os.path.join(task_dir, "summarization", "evaluation", "llm_judge", "llm_scores"),
+        "keyfact_alignment": os.path.join(task_dir, "summarization", "evaluation", "llm_judge", "keyfact_alignment"),
+        "keyfact_check": os.path.join(task_dir, "summarization", "evaluation", "llm_judge", "keyfact_check"),
+        "bertscore_results": os.path.join(task_dir, "summarization", "evaluation", "bertscore_results"),
+        "bleurt_results": os.path.join(task_dir, "summarization", "evaluation", "bleurt_results"),
+        "rouge_results": os.path.join(task_dir, "summarization", "evaluation", "rouge_results"),
+    }
 
-    prefixes = [
-        "summaries",
-        "llm_score",
-        "keyfact_alignment",
-        "keyfact_check",
-        "bertscore_results",
-        "bleurt_results",
-        "rouge_results",
-    ]
-
-    file_groups = {prefix: [] for prefix in prefixes}
-    for file in all_files:
-        for prefix in prefixes:
-            if file.startswith(prefix):
-                file_groups[prefix].append(file)
-                break
+    # 获取所有文件并分组
+    file_groups = {prefix: [] for prefix in prefix_dirs}
+    for prefix, dir_path in prefix_dirs.items():
+        if os.path.exists(dir_path):
+            all_files = os.listdir(dir_path)
+            for file in all_files:
+                if file.startswith(prefix):
+                    file_groups[prefix].append(file)
 
     with st.container(border=True):
         st.write("Result files")
@@ -68,15 +75,15 @@ if "task" in st.session_state:
 
         for prefix, files in file_groups.items():
             if files:
-                    is_selected = st.checkbox(prefix, value=True, key=f"checkbox_{prefix}")
-                    if is_selected:
-                        selected_file = st.selectbox(
-                            "",
-                            files,
-                            key=f"select_{prefix}",
-                            label_visibility="collapsed"
-                        )
-                        selected_files[prefix] = selected_file
+                is_selected = st.checkbox(prefix, value=True, key=f"checkbox_{prefix}")
+                if is_selected:
+                    selected_file = st.selectbox(
+                        "",
+                        files,
+                        key=f"select_{prefix}",
+                        label_visibility="collapsed"
+                    )
+                    selected_files[prefix] = os.path.join(prefix_dirs[prefix], selected_file)
 
         # 显示用户选择的文件
         if selected_files:
@@ -145,69 +152,90 @@ if "task" in st.session_state:
     with st.container(border=True):
         st.write("Report generation")
         if st.button("Generate report"):
-            report_template = init_template(st.session_state["task"])
-            similarity_judged = False
-            for prefix, file in st.session_state["selected_files"].items():
-                if prefix == "bertscore_results":
-                    if not similarity_judged:
-                        report_template +='<h2>Similarity Based Judgement</h2>'
-                        similarity_judged = True
-                    report_template = generate_bertscore_report(
-                        os.path.join(task_dir, file),
-                        report_template
-                    )
+            reports = {}
+            report_paths = {}
 
-                elif prefix == "bleurt_results":
-                    if not similarity_judged:
-                        report_template +='<h2>Similarity Based Judgement</h2>'
-                        similarity_judged = True
-                    report_template = generate_bleurt_report(
-                        os.path.join(task_dir, file),
-                        report_template
-                    )
+            # 根据用户勾选的评估角度，调用相应的报告生成函数
+            if "summaries" in selected_files:
+                report_paths["summaries"] = generate_summaries_html_report(selected_files["summaries"])
+            if "llm_score" in selected_files:
+                report_paths["llm_score"] = generate_llm_score_html_report(selected_files["llm_score"])
+            if "keyfact_alignment" in selected_files:
+                report_paths["keyfact_alignment"] = generate_keyfact_alignment_html_report(
+                    selected_files["keyfact_alignment"])
+            if "keyfact_check" in selected_files:
+                report_paths["keyfact_check"] = generate_keyfact_check_html_report(selected_files["keyfact_check"])
+            if "rouge_results" in selected_files:
+                report_paths["rouge_results"] = generate_rouge_results_html_report(selected_files["rouge_results"])
+            if "bertscore_results" in selected_files:
+                report_paths["bertscore_results"] = generate_bertscore_results_html_report(
+                    selected_files["bertscore_results"])
+            if "bleurt_results" in selected_files:
+                report_paths["bleurt_results"] = generate_bleurt_results_html_report(selected_files["bleurt_results"])
 
-                elif prefix == "keyfact_alignment":
-                    report_template = generate_keyfact_alignment_report(
-                        os.path.join(task_dir, file),
-                        report_template
-                    )
+            # 读取生成的报告内容
+            for category, report_path in report_paths.items():
+                with open(report_path, "r", encoding="utf-8") as file:
+                    reports[category] = file.read()
 
-                elif prefix == "keyfact_check":
-                    report_template = generate_keyfact_check_report(
-                        os.path.join(task_dir, file),
-                        report_template
-                    )
+            # 生成 HTML 模板
+            combined_html = """
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="utf-8">
+                    <title>Evaluation Report</title>
+                    <style>
+                        body {
+                            font-family: Arial, sans-serif;
+                            margin: 40px;
+                            background-color: #f4f4f4;
+                        }
+                        .container {
+                            max-width: 1200px;
+                            margin: 0 auto;
+                            background: white;
+                            padding: 20px;
+                            border-radius: 10px;
+                            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+                        }
+                        h1 {
+                            text-align: center;
+                            color: #333;
+                        }
+                        .report-section {
+                            margin-bottom: 40px;
+                        }
+                        .report-section h2 {
+                            background-color: #007BFF;
+                            color: white;
+                            padding: 10px;
+                            border-radius: 5px;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <h1>Evaluation Report</h1>
+                """
 
-                elif prefix == "rouge_results":
-                    if not similarity_judged:
-                        report_template +='<h2>Similarity Based Judgement</h2>'
-                        similarity_judged = True
-                    report_template = generate_rouge_report(
-                        os.path.join(task_dir, file),
-                        report_template
-                    )
+            # 动态添加各个评估角度的报告
+            for category, content in reports.items():
+                combined_html += f"""
+                        <div class="report-section">
+                            <h2>{category.replace('_', ' ').title()}</h2>
+                            {content}
+                        </div>
+                    """
 
-                elif prefix == "summaries":
-                    report_template = generate_summarization_report(
-                        os.path.join(task_dir, file),
-                        report_template
-                    )
-                elif prefix == "llm_score":
-                    report_template = generate_llm_score_report(
-                        os.path.join(task_dir, file),
-                        report_template
-                    )
+            combined_html += """
+                    </div>
+                </body>
+                </html>
+                """
 
-            report_template += '''
-</div>
-</body>
-</html>
-            '''
+            # 保存整合的 HTML 文件
+            combined_report_path = "combined_report.html"
+            with open(combined_report_path, "w", encoding="utf-8") as file:
+                file.write(combined_html)
 
-            st.components.v1.html(report_template, height=800, scrolling=True)
-            st.download_button(
-                label="Download Report",
-                data=report_template,
-                file_name="report_template.html",
-                mime="text/html"
-            )
