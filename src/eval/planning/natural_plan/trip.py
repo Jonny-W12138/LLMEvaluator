@@ -445,7 +445,7 @@ def evaluate_trip_response(response_path, task_name):
 
     # Prepare the folder and filename for saving results
     current_time = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    save_folder = os.path.join(os.getcwd(), "tasks", task_name, "planning", "trip", "result")
+    save_folder = os.path.join(os.getcwd(), "tasks", task_name, "planning", "trip", "evaluation")
     os.makedirs(save_folder, exist_ok=True)
     save_file = os.path.join(save_folder, f"trip_evaluate_{current_time}.json")
 
@@ -456,15 +456,17 @@ def evaluate_trip_response(response_path, task_name):
 
     for response in responses:
         evaluated_response = response.copy()  # Copy the original data
-        evaluated_response['evaluation_result'] = None
-        evaluated_response['error_reason'] = None
+        evaluated_response['evaluation'] = {
+            "passed": True,
+            "errors": []
+        }
 
         if response['success']:
             # If success is True, perform evaluation
-            is_valid, error_reason = validate(response['parsed_output'], response['problem'])
-            evaluated_response['evaluation_result'] = is_valid
+            is_valid, errors = validate(response['parsed_output'], response['problem'])
+            evaluated_response['evaluation']['passed'] = is_valid
             if not is_valid:
-                evaluated_response['error_reason'] = error_reason
+                evaluated_response['evaluation']['errors'] = errors
 
         evaluated_responses.append(evaluated_response)
         my_bar.progress((responses.index(response) + 1) / total_data_num, text=f"Processing {responses.index(response) + 1}/{total_data_num}")
@@ -479,22 +481,35 @@ def evaluate_trip_response(response_path, task_name):
 
 def validate(solution, problem):
     """Validate whether the given solution satisfies the problem constraints."""
+    errors = []
+
     # Convert solution to itinerary and stays
     itinerary = [city for city in solution.keys()]
     stays = {city: solution[city]['end'] - solution[city]['start'] + 1 for city in solution}
 
     # Validate that each city is visited only once
     if len(itinerary) != len(set(itinerary)):
-        return False, "Repeated city visits"
+        duplicates = [city for city in set(itinerary) if itinerary.count(city) > 1]
+        errors.append({
+            "type": "Repeated city visits",
+            "reason": f"City(s) {', '.join(duplicates)} are visited multiple times."
+        })
 
     # Validate the stay durations
     if stays != problem['stays']:
-        return False, "Stay durations do not match"
+        mismatched_cities = [city for city in stays if stays[city] != problem['stays'].get(city)]
+        errors.append({
+            "type": "Stay durations do not match",
+            "reason": f"Stay durations for {', '.join(mismatched_cities)} do not match the problem constraints."
+        })
 
     # Validate flight continuity
     for i in range(len(itinerary) - 1):
         if not problem['flights'][itinerary[i]].get(itinerary[i + 1], False):
-            return False, f"No direct flight: {itinerary[i]}→{itinerary[i + 1]}"
+            errors.append({
+                "type": "No direct flight",
+                "reason": f"No direct flight from {itinerary[i]} to {itinerary[i + 1]}."
+            })
 
     # Sort itinerary by start day to ensure correct order
     sorted_itinerary = sorted(itinerary, key=lambda x: solution[x]['start'])
@@ -508,13 +523,19 @@ def validate(solution, problem):
 
         # Check if days are continuous
         if next_start != current_end + 1:
-            return False, f"Days are not continuous: {current_city} ends on day {current_end}, but {next_city} starts on day {next_start}"
+            errors.append({
+                "type": "Days are not continuous",
+                "reason": f"{current_city} ends on day {current_end}, but {next_city} starts on day {next_start}."
+            })
 
         # Check for overlapping days
         current_range = range(solution[current_city]['start'], solution[current_city]['end'] + 1)
         next_range = range(solution[next_city]['start'], solution[next_city]['end'] + 1)
         if set(current_range).intersection(next_range):
-            return False, f"Overlapping days between {current_city} and {next_city}"
+            errors.append({
+                "type": "Overlapping days",
+                "reason": f"Days overlap between {current_city} and {next_city}."
+            })
 
     # Validate the time constraints
     current_day = 1
@@ -529,6 +550,13 @@ def validate(solution, problem):
         current_day += stay
 
     if not target_days.issubset(visited_days):
-        return False, f"Time constraints for {problem['constraint']['city']} are not satisfied"
+        missing_days = target_days - visited_days
+        errors.append({
+            "type": "Time constraints not satisfied",
+            "reason": f"Time constraints for {problem['constraint']['city']} are not satisfied. Missing days: {', '.join(map(str, missing_days))}."
+        })
 
-    return True, "Validation passed"
+    if errors:
+        return False, errors
+    else:
+        return True, []

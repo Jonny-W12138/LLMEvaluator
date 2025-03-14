@@ -626,7 +626,7 @@ def evaluate_all_responses(response_path, task_name):
         results.append(evaluate_response(response, cities_data))
 
     current_time = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    save_folder = os.path.join(os.getcwd(), "tasks", task_name, "planning", "meeting", "result")
+    save_folder = os.path.join(os.getcwd(), "tasks", task_name, "planning", "meeting", "evaluation")
     os.makedirs(save_folder, exist_ok=True)
     save_file = os.path.join(save_folder, f"meeting_evaluate_{current_time}.json")
 
