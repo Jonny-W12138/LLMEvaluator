@@ -4,7 +4,7 @@ import streamlit as st
 import plotly.figure_factory as ff
 import plotly.express as px
 import plotly.graph_objects as go
-
+from htmlmin import minify
 
 def bleurt_results_render(file_path):
     st.write("bleurt_results")
@@ -80,6 +80,7 @@ def bleurt_results_render(file_path):
         bleurt_data,
         x="category",
         y="score",
+        color="category",
         box=True,  # 显示箱线图
         points="all",  # 显示所有数据点
         title="BLEURT Score by Category",
@@ -123,11 +124,15 @@ def bleurt_results_render(file_path):
     )
     st.plotly_chart(fig_radar)
 
-    if st.button("Generate HTML report"):
-        generate_bleurt_results_html_report(file_path)
-        st.success("Report generated.")
+    if st.download_button(
+        label="Download BLEURT Results Report",
+        data=minify(generate_bleurt_results_html_report(file_path)),
+        file_name="bleurt_results_report.html",
+        mime="text/html"
+    ):
+        st.success("Report downloaded successfully.")
 
-def generate_bleurt_results_html_report(file_path, output_path="bleurt_results_report.html"):
+def generate_bleurt_results_html_report(file_path):
     """生成 BLEURT 数据的 HTML 报告"""
     # 读取数据
     with open(file_path, "r", encoding="utf-8") as f:
@@ -213,6 +218,7 @@ def generate_bleurt_results_html_report(file_path, output_path="bleurt_results_r
             x="category",
             y="score",
             template="plotly_white",
+            color="category",
             box=True,
             points="all",
             title="BLEURT Score by Category",
@@ -255,7 +261,7 @@ def generate_bleurt_results_html_report(file_path, output_path="bleurt_results_r
             plot_bgcolor='rgba(0,0,0,0)',
             showlegend=True
         )
-        radar_chart_html = fig_radar.to_html(full_html=False)
+        radar_chart_html = fig_radar.to_html(full_html=False, include_plotlyjs='cdn')
 
     # HTML 模板
     html_template = f"""
@@ -264,6 +270,7 @@ def generate_bleurt_results_html_report(file_path, output_path="bleurt_results_r
     <head>
         <meta charset="utf-8">
         <title>BLEURT Results Report</title>
+        <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
         <style>
             body {{
                 font-family: Arial, sans-serif;
@@ -350,8 +357,4 @@ def generate_bleurt_results_html_report(file_path, output_path="bleurt_results_r
     </html>
     """
 
-    # 保存为 HTML 文件
-    with open(output_path, "w", encoding="utf-8") as file:
-        file.write(html_template)
-
-    return output_path
+    return html_template

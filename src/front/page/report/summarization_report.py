@@ -3,6 +3,7 @@ import streamlit as st
 import os
 import json
 import sys
+from htmlmin import minify
 
 root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../..'))
 # 将根目录添加到sys.path
@@ -18,6 +19,126 @@ from src.front.page.report.summarization.keyfact_check import keyfact_check_rend
 from src.front.page.report.summarization.rouge_results import rouge_results_render, generate_rouge_results_html_report
 from src.front.page.report.summarization.bertscore_results import bertscore_results_render, generate_bertscore_results_html_report
 from src.front.page.report.summarization.bleurt_results import bleurt_results_render, generate_bleurt_results_html_report
+
+def generate_combined_report(selected_files):
+    reports = {}
+
+    # 评估角度与对应的报告生成函数
+    report_generators = {
+        "summaries": generate_summaries_html_report,
+        "llm_score": generate_llm_score_html_report,
+        "keyfact_alignment": generate_keyfact_alignment_html_report,
+        "keyfact_check": generate_keyfact_check_html_report,
+        "rouge_results": generate_rouge_results_html_report,
+        "bertscore_results": generate_bertscore_results_html_report,
+        "bleurt_results": generate_bleurt_results_html_report,
+    }
+
+    # 生成各个评估角度的报告
+    for category, generator in report_generators.items():
+        if category in selected_files:
+            reports[category] = generator(selected_files[category])
+
+    # 生成 HTML 页面
+    combined_html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>Evaluation Report</title>
+            <style>
+                body {
+                    font-family: Arial, sans-serif;
+                    margin: 0;
+                    padding: 0;
+                    display: flex;
+                }
+                .sidebar {
+                    width: 250px;
+                    background: #027bff;
+                    color: white;
+                    height: 100vh;
+                    padding-top: 20px;
+                    position: fixed;
+                    overflow-y: auto;
+                }
+                .sidebar h2 {
+                    text-align: center;
+                    margin-bottom: 20px;
+                }
+                .sidebar ul {
+                    list-style: none;
+                    padding: 0;
+                }
+                .sidebar ul li {
+                    padding: 10px;
+                    text-align: center;
+                }
+                .sidebar ul li a {
+                    color: white;
+                    text-decoration: none;
+                    display: block;
+                    padding: 10px;
+                    transition: 0.3s;
+                }
+                .sidebar ul li a:hover {
+                    background: #34495e;
+                }
+                .content {
+                    margin-left: 270px;
+                    padding: 20px;
+                    width: calc(100% - 270px);
+                }
+                .report-section {
+                    display: none;
+                }
+                .active {
+                    display: block;
+                }
+            </style>
+            <script>
+                function showReport(reportId) {
+                    var sections = document.getElementsByClassName("report-section");
+                    for (var i = 0; i < sections.length; i++) {
+                        sections[i].classList.remove("active");
+                    }
+                    document.getElementById(reportId).classList.add("active");
+                }
+            </script>
+        </head>
+        <body>
+            <div class="sidebar">
+                <h2 style="color:white;">Summarization Reports</h2>
+                <ul>
+        """
+
+    # 生成侧边栏目录
+    for category in reports.keys():
+        display_name = category.replace("_", " ").title()  # 先进行常规格式化
+        display_name = display_name.replace("Llm", "LLM")  # 额外处理 LLM
+        combined_html += f'<li><a href="#" onclick="showReport(\'{category}\')">{display_name}</a></li>'
+
+    combined_html += """
+                </ul>
+            </div>
+            <div class="content">
+                <h1>Summarization Report</h1>
+        """
+
+    # 生成各个评估角度的内容，并默认显示第一个
+    first = True
+    for category, content in reports.items():
+        active_class = "active" if first else ""
+        combined_html += f'<div id="{category}" class="report-section {active_class}">{content}</div>'
+        first = False
+
+    combined_html += """
+            </div>
+        </body>
+        </html>
+        """
+
+    return minify(combined_html)
 
 render_functions = {
     "bertscore_results": bertscore_results_render,
@@ -151,132 +272,14 @@ if "task" in st.session_state:
 
     with st.container(border=True):
         st.write("Report generation")
-        if st.button("Generate report"):
-            reports = {}
-            report_paths = {}
+        if st.download_button(
+            label="Download combined report",
+            data=generate_combined_report(st.session_state["selected_files"]),
+            file_name="summarization_combined_report.html",
+            mime="text/html"
+        ):
+            st.success("HTML report downloaded successfully.")
 
-            # 评估角度与对应的报告生成函数
-            report_generators = {
-                "summaries": generate_summaries_html_report,
-                "llm_score": generate_llm_score_html_report,
-                "keyfact_alignment": generate_keyfact_alignment_html_report,
-                "keyfact_check": generate_keyfact_check_html_report,
-                "rouge_results": generate_rouge_results_html_report,
-                "bertscore_results": generate_bertscore_results_html_report,
-                "bleurt_results": generate_bleurt_results_html_report,
-            }
 
-            # 生成各个评估角度的报告
-            for category, generator in report_generators.items():
-                if category in selected_files:
-                    report_paths[category] = generator(selected_files[category])
 
-            # 读取各个报告的内容
-            for category, report_path in report_paths.items():
-                with open(report_path, "r", encoding="utf-8") as file:
-                    reports[category] = file.read()
-
-            # 生成 HTML 页面
-            combined_html = """
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <meta charset="utf-8">
-                    <title>Evaluation Report</title>
-                    <style>
-                        body {
-                            font-family: Arial, sans-serif;
-                            margin: 0;
-                            padding: 0;
-                            display: flex;
-                        }
-                        .sidebar {
-                            width: 250px;
-                            background: #027bff;
-                            color: white;
-                            height: 100vh;
-                            padding-top: 20px;
-                            position: fixed;
-                            overflow-y: auto;
-                        }
-                        .sidebar h2 {
-                            text-align: center;
-                            margin-bottom: 20px;
-                        }
-                        .sidebar ul {
-                            list-style: none;
-                            padding: 0;
-                        }
-                        .sidebar ul li {
-                            padding: 10px;
-                            text-align: center;
-                        }
-                        .sidebar ul li a {
-                            color: white;
-                            text-decoration: none;
-                            display: block;
-                            padding: 10px;
-                            transition: 0.3s;
-                        }
-                        .sidebar ul li a:hover {
-                            background: #34495e;
-                        }
-                        .content {
-                            margin-left: 270px;
-                            padding: 20px;
-                            width: calc(100% - 270px);
-                        }
-                        .report-section {
-                            display: none;
-                        }
-                        .active {
-                            display: block;
-                        }
-                    </style>
-                    <script>
-                        function showReport(reportId) {
-                            var sections = document.getElementsByClassName("report-section");
-                            for (var i = 0; i < sections.length; i++) {
-                                sections[i].classList.remove("active");
-                            }
-                            document.getElementById(reportId).classList.add("active");
-                        }
-                    </script>
-                </head>
-                <body>
-                    <div class="sidebar">
-                        <h2 style="color:white;">Evaluation Reports</h2>
-                        <ul>
-                """
-
-            # 生成侧边栏目录
-            for category in reports.keys():
-                display_name = category.replace("_", " ").title()  # 先进行常规格式化
-                display_name = display_name.replace("Llm", "LLM")  # 额外处理 LLM
-                combined_html += f'<li><a href="#" onclick="showReport(\'{category}\')">{display_name}</a></li>'
-
-            combined_html += """
-                        </ul>
-                    </div>
-                    <div class="content">
-                        <h1>Evaluation Report</h1>
-                """
-
-            # 生成各个评估角度的内容，并默认显示第一个
-            first = True
-            for category, content in reports.items():
-                active_class = "active" if first else ""
-                combined_html += f'<div id="{category}" class="report-section {active_class}">{content}</div>'
-                first = False
-
-            combined_html += """
-                    </div>
-                </body>
-                </html>
-                """
-
-            # 保存最终 HTML 文件
-            combined_report_path = "combined_report.html"
-            with open(combined_report_path, "w", encoding="utf-8") as file:
-                file.write(combined_html)
 

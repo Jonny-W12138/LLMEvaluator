@@ -104,10 +104,15 @@ def keyfact_alignment_render(file_path):
     )
     st.plotly_chart(fig_radar)
 
-    if st.button("Generate HTML Report", key="generate_keyfact_alignment_html_report"):
-        generate_keyfact_alignment_html_report(file_path)
+    if st.download_button(
+        label="Download Keyfact Alignment Report",
+        data=generate_keyfact_alignment_html_report(file_path),
+        file_name="keyfact_alignment_report.html",
+        mime="text/html"
+    ):
+        st.success("Report downloaded successfully.")
 
-def generate_keyfact_alignment_html_report(file_path, output_path="keyfact_alignment_report.html"):
+def generate_keyfact_alignment_html_report(file_path):
     """生成关键事实对齐数据的 HTML 报告"""
     # 读取数据
     with open(file_path, "r", encoding="utf-8") as f:
@@ -192,7 +197,7 @@ def generate_keyfact_alignment_html_report(file_path, output_path="keyfact_align
             labels={"value": "Count", "variable": "Status"},
             color_discrete_map={"Correct pred_labels": "lightgreen", "Incorrect pred_labels": "lightcoral"}
         )
-        stacked_bar_html = fig_stacked_bar.to_html(full_html=False)
+        stacked_bar_html = fig_stacked_bar.to_html(full_html=False, include_plotlyjs="cdn")
 
     # 生成雷达图
     radar_chart_html = ""
@@ -224,7 +229,7 @@ def generate_keyfact_alignment_html_report(file_path, output_path="keyfact_align
             plot_bgcolor='rgba(0,0,0,0)',
             showlegend=True
         )
-        radar_chart_html = fig_radar.to_html(full_html=False)
+        radar_chart_html = fig_radar.to_html(full_html=False, include_plotlyjs="cdn")
 
     # HTML 模板
     html_template = f"""
@@ -233,6 +238,7 @@ def generate_keyfact_alignment_html_report(file_path, output_path="keyfact_align
     <head>
         <meta charset="utf-8">
         <title>Keyfact Alignment Report</title>
+        <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
         <style>
             body {{
                 font-family: Arial, sans-serif;
@@ -311,8 +317,4 @@ def generate_keyfact_alignment_html_report(file_path, output_path="keyfact_align
     </html>
     """
 
-    # 保存为 HTML 文件
-    with open(output_path, "w", encoding="utf-8") as file:
-        file.write(html_template)
-
-    return output_path
+    return html_template

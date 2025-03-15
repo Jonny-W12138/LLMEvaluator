@@ -63,11 +63,14 @@ def summaries_render(file_path):
     else:
         st.warning("No 'category' field found in the data. Cannot create violin plot.")
 
-    if st.button("Generate HTML Report", key="generate_summaries_html_report"):
-        output_path = generate_summaries_html_report(file_path)
-        st.success(f"HTML report generated: {output_path}")
+    st.download_button(
+        label="Download HTML Report",
+        data=generate_summaries_html_report(file_path),
+        file_name="summaries_report.html",
+        mime="text/html"
+    )
 
-def generate_summaries_html_report(file_path, output_path="summaries_report.html"):
+def generate_summaries_html_report(file_path):
     """生成摘要数据的 HTML 报告"""
     # 读取数据
     with open(file_path, "r", encoding="utf-8") as f:
@@ -91,7 +94,7 @@ def generate_summaries_html_report(file_path, output_path="summaries_report.html
 
     # 生成摘要长度分布图
     fig_hist = ff.create_distplot([summary_lengths], ["Summary Length"], show_hist=False)
-    hist_chart_html = fig_hist.to_html(full_html=False)
+    hist_chart_html = fig_hist.to_html(full_html=False, include_plotlyjs="cdn")
 
     # 生成类别摘要长度小提琴图（如果存在类别字段）
     violin_chart_html = ""
@@ -108,7 +111,7 @@ def generate_summaries_html_report(file_path, output_path="summaries_report.html
             title="Summary Length Distribution by Category",
             labels={"category": "Category", "summary_length": "Summary Length"},
         )
-        violin_chart_html = fig_violin.to_html(full_html=False)
+        violin_chart_html = fig_violin.to_html(full_html=False, include_plotlyjs="cdn")
 
     # HTML 模板
     html_template = f"""
@@ -117,6 +120,7 @@ def generate_summaries_html_report(file_path, output_path="summaries_report.html
     <head>
         <meta charset="utf-8">
         <title>Summaries Report</title>
+        <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
         <style>
             body {{
                 font-family: Arial, sans-serif;
@@ -190,8 +194,4 @@ def generate_summaries_html_report(file_path, output_path="summaries_report.html
     </html>
     """
 
-    # 保存为 HTML 文件
-    with open(output_path, "w", encoding="utf-8") as file:
-        file.write(html_template)
-
-    return output_path
+    return html_template

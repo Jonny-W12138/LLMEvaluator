@@ -2,6 +2,7 @@ import json
 import pandas as pd
 import streamlit as st
 import plotly.express as px
+import plotly.graph_objects as go
 
 def load_math_data(file_path):
     """
@@ -10,7 +11,6 @@ def load_math_data(file_path):
     with open(file_path, "r") as file:
         data = json.load(file)
     return data
-
 
 def display_math_metrics(data):
     """
@@ -32,64 +32,138 @@ def display_math_metrics(data):
     with col4:
         st.metric("Correct Rate", f"{correct_rate:.2f}%")
 
-
-def display_math_charts(data):
+def display_math_category_metrics(data):
     """
-    展示计算能力测评的图表
+    展示按类别的指标
     """
-    # 准备数据
-    chart_data = {
-        "Total Tests": len(data["evaluation"]),
-        "Successful Tests": sum(1 for item in data["evaluation"] if item["success"]),
-        "Correct Tests": sum(1 for item in data["evaluation"] if item["evaluation"]["if_correct"] == "correct"),
-    }
-    df = pd.DataFrame(list(chart_data.items()), columns=["Metric", "Count"])
-
-    # 显示柱状图
-    st.write("### Test Results Distribution")
-    st.bar_chart(df.set_index("Metric"))
-
-
-def display_math_pie_chart(data):
-    """
-    展示通过情况和错误情况的占比饼图
-    """
-    # 准备数据
-    correct_count = sum(1 for item in data["evaluation"] if item["evaluation"]["if_correct"] == "correct")
-    incorrect_count = len(data["evaluation"]) - correct_count
-
-    error_types = {}
+    # 按类别分组
+    category_data = {}
     for item in data["evaluation"]:
-        if item["evaluation"]["if_correct"] == "incorrect":
-            for step in item["evaluation"]["eval_steps"].values():
-                if step["categorie"] == "Negative":
-                    sub_category = step["sub-categories"]
-                    if sub_category in error_types:
-                        error_types[sub_category] += 1
-                    else:
-                        error_types[sub_category] = 1
+        category = item["origin_response"]["metadata"]["type"]
+        if category not in category_data:
+            category_data[category] = {"total": 0, "success": 0, "correct": 0}
+        category_data[category]["total"] += 1
+        if item["success"]:
+            category_data[category]["success"] += 1
+        if item["evaluation"]["if_correct"] == "correct":
+            category_data[category]["correct"] += 1
 
-    # 创建饼图数据
-    pie_data = {
-        "Category": ["Correct", "Incorrect"],
-        "Count": [correct_count, incorrect_count]
-    }
-    df_pie = pd.DataFrame(pie_data)
+    # 显示类别指标
+    st.write("### Metrics by Category")
+    for category, metrics in category_data.items():
+        st.write(f"**Category: {category}**")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Tests", metrics["total"])
+        with col2:
+            st.metric("Success", metrics["success"])
+        with col3:
+            st.metric("Correct", metrics["correct"])
 
-    # 创建饼图
-    fig = px.pie(df_pie, values="Count", names="Category", title="Correct vs Incorrect Tests")
+def display_math_difficulty_metrics(data):
+    """
+    展示按难度的指标
+    """
+    # 按难度分组
+    difficulty_data = {}
+    for item in data["evaluation"]:
+        difficulty = item["origin_response"]["metadata"]["level"]
+        if difficulty not in difficulty_data:
+            difficulty_data[difficulty] = {"total": 0, "success": 0, "correct": 0}
+        difficulty_data[difficulty]["total"] += 1
+        if item["success"]:
+            difficulty_data[difficulty]["success"] += 1
+        if item["evaluation"]["if_correct"] == "correct":
+            difficulty_data[difficulty]["correct"] += 1
+
+    # 显示难度指标
+    st.write("### Metrics by Difficulty")
+    for difficulty, metrics in difficulty_data.items():
+        st.write(f"**Difficulty: {difficulty}**")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Tests", metrics["total"])
+        with col2:
+            st.metric("Success", metrics["success"])
+        with col3:
+            st.metric("Correct", metrics["correct"])
+
+def display_math_category_difficulty_chart(data):
+    category_difficulty_data = []
+    for item in data["evaluation"]:
+        category = item["origin_response"]["metadata"]["type"]
+        difficulty = item["origin_response"]["metadata"]["level"]
+        correct = 1 if item["evaluation"]["if_correct"] == "correct" else 0
+        category_difficulty_data.append({
+            "Category": category,
+            "Difficulty": f"Level {difficulty}",
+            "Correct": correct
+        })
+
+    # 创建数据框
+    df = pd.DataFrame(category_difficulty_data)
+
+    # 计算每个类别和难度的正确率
+    df_correct_rate = df.groupby(["Category", "Difficulty"]).mean().reset_index()
+
+    # 显示条形统计图
+    st.write("### Correct Rate by Category and Difficulty")
+    fig = px.bar(
+        df_correct_rate,
+        x="Category",
+        y="Correct",
+        color="Difficulty",
+        template="plotly_dark",
+        barmode="group",
+        text_auto=True,
+        labels={"Correct": "Correct Rate", "Category": "Category", "Difficulty": "Difficulty"}
+    )
+    fig.update_traces(textposition='outside')
     st.plotly_chart(fig)
 
-    # 如果有错误类型，显示错误类型的饼图
-    if error_types:
-        error_data = {
-            "Error Type": list(error_types.keys()),
-            "Count": list(error_types.values())
-        }
-        df_errors = pd.DataFrame(error_data)
-        fig_errors = px.pie(df_errors, values="Count", names="Error Type", title="Error Types Distribution")
-        st.plotly_chart(fig_errors)
+def display_math_radar_chart(data):
+    """
+    展示各个类别的正确率雷达图
+    """
+    # 按类别分组
+    category_data = {}
+    for item in data["evaluation"]:
+        category = item["origin_response"]["metadata"]["type"]
+        if category not in category_data:
+            category_data[category] = {"total": 0, "correct": 0}
+        category_data[category]["total"] += 1
+        if item["evaluation"]["if_correct"] == "correct":
+            category_data[category]["correct"] += 1
 
+    # 计算正确率
+    categories = list(category_data.keys())
+    correct_rates = [(v["correct"] / v["total"]) if v["total"] > 0 else 0 for v in category_data.values()]
+
+    # 创建雷达图
+    fig_radar = go.Figure()
+    fig_radar.add_trace(go.Scatterpolar(
+        r=correct_rates,
+        theta=categories,
+        fill='toself',
+        name="Correct Rate"
+    ))
+    fig_radar.update_layout(
+        polar=dict(
+            radialaxis=dict(
+                visible=True,
+                range=[0, 1]
+            ),
+            bgcolor='rgba(0,0,0,0)'
+        ),
+        template="plotly_white",
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        showlegend=True
+    )
+
+    # 显示雷达图
+    st.write("### Correct Rate by Category (Radar Chart)")
+    st.plotly_chart(fig_radar)
 
 def display_math_details(data):
     """
@@ -117,6 +191,7 @@ def display_math_details(data):
         details.append({
             "Test ID": index + 1,
             "Type": item["origin_response"]["metadata"]["type"],
+            "Difficulty": item["origin_response"]["metadata"]["level"],
             "Success": item["success"],
             "Correct": item["evaluation"]["if_correct"] == "correct",
             "Positive Steps": positive_count,
@@ -156,87 +231,146 @@ def display_math_details(data):
 
 def generate_math_html_report(data):
     """生成精美的 HTML 报告"""
+    # 总体指标
     total_tests = len(data["evaluation"])
     successful_tests = sum(1 for item in data["evaluation"] if item["success"])
     correct_tests = sum(1 for item in data["evaluation"] if item["evaluation"]["if_correct"] == "correct")
     correct_rate = (correct_tests / total_tests) * 100 if total_tests > 0 else 0
 
-    # 生成柱状图
-    df_bar = pd.DataFrame({
-        "Metric": ["Total Tests", "Successful Tests", "Correct Tests"],
-        "Count": [total_tests, successful_tests, correct_tests]
-    })
-    fig_bar = px.bar(df_bar, x="Metric", y="Count", title="Test Results Distribution", text="Count",
-                     template="plotly_white")
-    bar_chart_html = fig_bar.to_html(full_html=False)
-
-    # 生成通过情况饼图
-    df_pie = pd.DataFrame({
-        "Category": ["Correct", "Incorrect"],
-        "Count": [correct_tests, total_tests - correct_tests]
-    })
-    fig_pie = px.pie(df_pie, values="Count", names="Category", title="Correct vs Incorrect Tests",
-                     template="plotly_white")
-    pie_chart_html = fig_pie.to_html(full_html=False)
-
-    # 生成错误类型分布饼图
-    error_types = {}
+    # 按类别分组
+    category_data = {}
     for item in data["evaluation"]:
-        if item["evaluation"]["if_correct"] == "incorrect":
-            for step in item["evaluation"]["eval_steps"].values():
-                if step["categorie"] == "Negative":
-                    sub_category = step["sub-categories"]
-                    error_types[sub_category] = error_types.get(sub_category, 0) + 1
-    error_chart_html = ""
-    if error_types:
-        df_errors = pd.DataFrame({
-            "Error Type": list(error_types.keys()),
-            "Count": list(error_types.values())
+        category = item["origin_response"]["metadata"]["type"]
+        if category not in category_data:
+            category_data[category] = {"total": 0, "success": 0, "correct": 0}
+        category_data[category]["total"] += 1
+        if item["success"]:
+            category_data[category]["success"] += 1
+        if item["evaluation"]["if_correct"] == "correct":
+            category_data[category]["correct"] += 1
+
+    # 按难度分组
+    difficulty_data = {}
+    for item in data["evaluation"]:
+        difficulty = item["origin_response"]["metadata"]["level"]
+        if difficulty not in difficulty_data:
+            difficulty_data[difficulty] = {"total": 0, "success": 0, "correct": 0}
+        difficulty_data[difficulty]["total"] += 1
+        if item["success"]:
+            difficulty_data[difficulty]["success"] += 1
+        if item["evaluation"]["if_correct"] == "correct":
+            difficulty_data[difficulty]["correct"] += 1
+
+    # 按类别和难度分组
+    category_difficulty_data = []
+    for item in data["evaluation"]:
+        category = item["origin_response"]["metadata"]["type"]
+        difficulty = item["origin_response"]["metadata"]["level"]
+        correct = 1 if item["evaluation"]["if_correct"] == "correct" else 0
+        category_difficulty_data.append({
+            "Category": category,
+            "Difficulty": f"Level {difficulty}",
+            "Correct": correct
         })
-        fig_errors = px.pie(df_errors, values="Count", names="Error Type", title="Error Types Distribution",
-                            template="plotly_white")
-        error_chart_html = fig_errors.to_html(full_html=False)
+
+    # 计算每个类别和难度的正确率
+    df_category_difficulty = pd.DataFrame(category_difficulty_data)
+    df_correct_rate = df_category_difficulty.groupby(["Category", "Difficulty"]).mean().reset_index()
+
+    # 生成条形统计图
+    fig_bar = px.bar(
+        df_correct_rate,
+        x="Category",
+        y="Correct",
+        color="Difficulty",
+        barmode="group",
+        text_auto=True,
+        labels={"Correct": "Correct Rate", "Category": "Category", "Difficulty": "Difficulty"},
+        title="Correct Rate by Category and Difficulty",
+        template="plotly_white"
+    )
+    fig_bar.update_traces(textposition='outside')
+    bar_chart_html = fig_bar.to_html(full_html=False, include_plotlyjs="cdn")
+
+    # 生成雷达图
+    category_rates = {}
+    for item in data["evaluation"]:
+        category = item["origin_response"]["metadata"]["type"]
+        if category not in category_rates:
+            category_rates[category] = {"total": 0, "correct": 0}
+        category_rates[category]["total"] += 1
+        if item["evaluation"]["if_correct"] == "correct":
+            category_rates[category]["correct"] += 1
+
+    categories = list(category_rates.keys())
+    correct_rates = [(v["correct"] / v["total"]) if v["total"] > 0 else 0 for v in category_rates.values()]
+
+    fig_radar = go.Figure()
+    fig_radar.add_trace(go.Scatterpolar(
+        r=correct_rates,
+        theta=categories,
+        fill='toself',
+        name="Correct Rate"
+    ))
+    fig_radar.update_layout(
+        polar=dict(
+            radialaxis=dict(
+                visible=True,
+                range=[0, 1]
+            ),
+            bgcolor='rgba(0,0,0,0)'
+        ),
+        template="plotly_white",
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        showlegend=True,
+        title="Correct Rate by Category (Radar Chart)"
+    )
+    radar_chart_html = fig_radar.to_html(full_html=False, include_plotlyjs="cdn")
 
     # 生成表格
-    details = [
-        {
+    details = []
+    for index, item in enumerate(data["evaluation"]):
+        eval_steps = item["evaluation"]["eval_steps"]
+        positive_count = sum(1 for step in eval_steps.values() if step["categorie"] == "Positive")
+        neutral_count = sum(1 for step in eval_steps.values() if step["categorie"] == "Neutral")
+        negative_count = sum(1 for step in eval_steps.values() if step["categorie"] == "Negative")
+        negative_types = {}
+        for step in eval_steps.values():
+            if step["categorie"] == "Negative":
+                sub_category = step["sub-categories"]
+                if sub_category in negative_types:
+                    negative_types[sub_category] += 1
+                else:
+                    negative_types[sub_category] = 1
+        negative_details = ", ".join([f"{k}: {v}" for k, v in negative_types.items()]) if negative_types else "None"
+
+        details.append({
             "Test ID": index + 1,
             "Type": item["origin_response"]["metadata"]["type"],
+            "Difficulty": item["origin_response"]["metadata"]["level"],
             "Success": item["success"],
             "Correct": item["evaluation"]["if_correct"] == "correct",
-            "Positive Steps": sum(
-                1 for step in item["evaluation"]["eval_steps"].values() if step["categorie"] == "Positive"
-            ),
-            "Neutral Steps": sum(
-                1 for step in item["evaluation"]["eval_steps"].values() if step["categorie"] == "Neutral"
-            ),
-            "Negative Steps": sum(
-                1 for step in item["evaluation"]["eval_steps"].values() if step["categorie"] == "Negative"
-            ),
-            "Negative Details": ", ".join(
-                [
-                    f"{k}: {v}"
-                    for k, v in {
-                    step["sub-categories"]: sum(
-                        1
-                        for s in item["evaluation"]["eval_steps"].values()
-                        if s.get("sub-categories") == step["sub-categories"]
-                    )
-                    for step in item["evaluation"]["eval_steps"].values()
-                    if step["categorie"] == "Negative" and "sub-categories" in step
-                }.items()
-                ]
-            )
-            if any(
-                step["categorie"] == "Negative" and "sub-categories" in step
-                for step in item["evaluation"]["eval_steps"].values()
-            )
-            else "None"
-        }
-        for index, item in enumerate(data["evaluation"])
-    ]
+            "Positive Steps": positive_count,
+            "Neutral Steps": neutral_count,
+            "Negative Steps": negative_count,
+            "Negative Details": negative_details
+        })
     df = pd.DataFrame(details)
     table_html = df.to_html(classes="table table-striped", index=False)
+
+    # 生成按类别和难度的指标表格
+    def generate_metrics_table(metrics, title):
+        df = pd.DataFrame(metrics).T.reset_index()
+        df.columns = ["Category/Difficulty", "Total Tests", "Success", "Correct"]
+        html = f"""
+        <h3>{title}</h3>
+        {df.to_html(classes="table table-striped", index=False)}
+        """
+        return html
+
+    category_metrics_html = generate_metrics_table(category_data, "Metrics by Category")
+    difficulty_metrics_html = generate_metrics_table(difficulty_data, "Metrics by Difficulty")
 
     # HTML 模板
     html_template = f"""
@@ -245,6 +379,7 @@ def generate_math_html_report(data):
     <head>
         <meta charset="utf-8">
         <title>Math Test Report</title>
+        <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
         <style>
             body {{
                 font-family: Arial, sans-serif;
@@ -255,6 +390,7 @@ def generate_math_html_report(data):
                 max-width: 1000px;
                 background: white;
                 padding: 20px;
+                margin: 0 auto;
                 border-radius: 10px;
                 box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
             }}
@@ -307,13 +443,14 @@ def generate_math_html_report(data):
                 <div>Correct Rate: {correct_rate:.2f}%</div>
             </div>
 
-            <h2>Test Results Distribution</h2>
+            {category_metrics_html}
+            {difficulty_metrics_html}
+
+            <h2>Correct Rate by Category and Difficulty</h2>
             {bar_chart_html}
 
-            <h2>Correct vs Incorrect Tests</h2>
-            {pie_chart_html}
-
-            {f"<h2>Error Types Distribution</h2>{error_chart_html}" if error_types else ""}
+            <h2>Correct Rate by Category (Radar Chart)</h2>
+            {radar_chart_html}
 
             <h2>Detailed Test Results</h2>
             <div class="table-container">
@@ -324,17 +461,10 @@ def generate_math_html_report(data):
     </html>
     """
 
-    # 保存为 HTML 文件
-    with open("math_report.html", "w", encoding="utf-8") as file:
-        file.write(html_template)
-
-    return "math_report.html"
+    return html_template
 
 
 def render_math_tab(file_path):
-    """
-    渲染 Math 任务的选项卡内容
-    """
     with st.container():
         st.write("### Math")
         data = load_math_data(file_path)
@@ -342,15 +472,23 @@ def render_math_tab(file_path):
         # 展示关键指标
         display_math_metrics(data)
 
-        # 展示图表
-        display_math_charts(data)
+        # 展示按类别和难度的指标
+        display_math_category_metrics(data)
+        display_math_difficulty_metrics(data)
 
-        # 展示饼图
-        display_math_pie_chart(data)
+        # 展示各个类别的各个难度的正确率条形统计图
+        display_math_category_difficulty_chart(data)
+
+        # 展示雷达图
+        display_math_radar_chart(data)
 
         # 展示详细结果
         display_math_details(data)
 
-        if st.button("Generate Report"):
-            report_path = generate_math_html_report(data)
-            st.success(f"Report generated successfully: {report_path}")
+        if st.download_button(
+            label="Download HTML Report",
+            data=generate_math_html_report(data),
+            file_name="math_report.html",
+            mime="text/html"
+        ):
+            st.success("HTML report downloaded successfully!")

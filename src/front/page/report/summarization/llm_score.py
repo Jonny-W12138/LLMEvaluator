@@ -74,10 +74,15 @@ def llm_score_render(file_path):
     else:
         st.warning("No category scores available to display radar chart.")
 
-    if st.button("Generate HTML Report", key="generate_llm_score_html_report"):
-        generate_llm_score_html_report(file_path)
+    if st.download_button(
+        label="Download HTML Report",
+        data=generate_llm_score_html_report(file_path),
+        file_name="llm_score_report.html",
+        mime="text/html"
+    ):
+        st.success("HTML report downloaded successfully.")
 
-def generate_llm_score_html_report(file_path, output_path="llm_score_report.html"):
+def generate_llm_score_html_report(file_path):
     """生成 LLM 评分数据的 HTML 报告"""
     # 读取数据
     with open(file_path, "r", encoding="utf-8") as f:
@@ -149,7 +154,7 @@ def generate_llm_score_html_report(file_path, output_path="llm_score_report.html
             template="plotly_white",
             showlegend=True
         )
-        radar_chart_html = fig.to_html(full_html=False)
+        radar_chart_html = fig.to_html(full_html=False, include_plotlyjs='cdn')
 
     # HTML 模板
     html_template = f"""
@@ -158,6 +163,7 @@ def generate_llm_score_html_report(file_path, output_path="llm_score_report.html
     <head>
         <meta charset="utf-8">
         <title>LLM Score Report</title>
+        <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
         <style>
             body {{
                 font-family: Arial, sans-serif;
@@ -234,8 +240,4 @@ def generate_llm_score_html_report(file_path, output_path="llm_score_report.html
     </html>
     """
 
-    # 保存为 HTML 文件
-    with open(output_path, "w", encoding="utf-8") as file:
-        file.write(html_template)
-
-    return output_path
+    return html_template

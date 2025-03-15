@@ -172,7 +172,7 @@ def generate_meeting_html_report(data):
         "Count": [total_tests, successful_tests, passed_tests]
     })
     fig_bar = px.bar(df_bar, x="Metric", y="Count", title="Test Results Distribution", text="Count", template="plotly_white")
-    bar_chart_html = fig_bar.to_html(full_html=False)
+    bar_chart_html = fig_bar.to_html(full_html=False, include_plotlyjs="cdn")
 
     # 生成通过情况饼图
     df_pie = pd.DataFrame({
@@ -180,7 +180,7 @@ def generate_meeting_html_report(data):
         "Count": [passed_tests, total_tests - passed_tests]
     })
     fig_pie = px.pie(df_pie, values="Count", names="Category", title="Passed vs Failed Tests", template="plotly_white")
-    pie_chart_html = fig_pie.to_html(full_html=False)
+    pie_chart_html = fig_pie.to_html(full_html=False, include_plotlyjs="cdn")
 
     # 生成错误类型分布饼图
     error_types = {}
@@ -196,7 +196,7 @@ def generate_meeting_html_report(data):
             "Count": list(error_types.values())
         })
         fig_errors = px.pie(df_errors, values="Count", names="Error Type", title="Error Types Distribution", template="plotly_white")
-        error_chart_html = fig_errors.to_html(full_html=False)
+        error_chart_html = fig_errors.to_html(full_html=False, include_plotlyjs="cdn")
 
     # 生成不同难度下的表现数据
     difficulty_groups = {}
@@ -225,11 +225,11 @@ def generate_meeting_html_report(data):
     # 生成不同难度下的柱状图
     fig_difficulty_bar = px.bar(df_difficulty, x="Difficulty", y=["Total Tests", "Successful Tests", "Passed Tests"],
                                 title="Test Results by Difficulty", barmode="group", text_auto=True, template="plotly_white")
-    difficulty_bar_chart_html = fig_difficulty_bar.to_html(full_html=False)
+    difficulty_bar_chart_html = fig_difficulty_bar.to_html(full_html=False, include_plotlyjs="cdn")
 
     # 生成不同难度下的饼图
     fig_difficulty_pie = px.pie(df_difficulty, values="Pass Rate", names="Difficulty", title="Pass Rate by Difficulty", template="plotly_white")
-    difficulty_pie_chart_html = fig_difficulty_pie.to_html(full_html=False)
+    difficulty_pie_chart_html = fig_difficulty_pie.to_html(full_html=False, include_plotlyjs="cdn")
 
     # 生成表格
     details = [
@@ -254,6 +254,7 @@ def generate_meeting_html_report(data):
     <head>
         <meta charset="utf-8">
         <title>Meeting Test Report</title>
+        <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
         <style>
             body {{
                 font-family: Arial, sans-serif;
@@ -339,11 +340,7 @@ def generate_meeting_html_report(data):
     </html>
     """
 
-    # 保存为 HTML 文件
-    with open("meeting_report.html", "w", encoding="utf-8") as file:
-        file.write(html_template)
-
-    return "meeting_report.html"
+    return html_template
 
 def render_meeting_tab(file_path):
     with st.container():
@@ -360,6 +357,10 @@ def render_meeting_tab(file_path):
 
         display_meeting_details(data)
 
-        if st.button("Generate Report", key="meeting_generate_report"):
-            report_path = generate_meeting_html_report(data)
-            st.success(f"Report generated successfully: {report_path}")
+        if st.download_button(
+            label="Download HTML Report",
+            data=generate_meeting_html_report(data),
+            file_name="meeting_report.html",
+            mime="text/html"
+        ):
+            st.success("HTML report downloaded successfully.")
