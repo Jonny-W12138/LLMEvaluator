@@ -112,11 +112,15 @@ def keyfact_check_render(file_path):
     )
     st.plotly_chart(fig_radar)
 
-    if st.button("Generate HTML Report", key="generate_keyfact_check_html_report"):
-        output_path = generate_keyfact_check_html_report(file_path)
-        st.success(f"HTML report generated successfully: {output_path}")
+    if st.download_button(
+        label="Download Keyfact Check Report",
+        data=generate_keyfact_check_html_report(file_path),
+        file_name="keyfact_check_report.html",
+        mime="text/html"
+    ):
+        st.success("Report downloaded successfully.")
 
-def generate_keyfact_check_html_report(file_path, output_path="keyfact_check_report.html"):
+def generate_keyfact_check_html_report(file_path):
     """生成关键事实检查数据的 HTML 报告"""
     # 读取数据
     with open(file_path, "r", encoding="utf-8") as f:
@@ -201,7 +205,7 @@ def generate_keyfact_check_html_report(file_path, output_path="keyfact_check_rep
             template="plotly_white",
             labels={"value": "Count", "variable": "Status"},
         )
-        stacked_bar_html = fig_stacked_bar.to_html(full_html=False)
+        stacked_bar_html = fig_stacked_bar.to_html(full_html=False, include_plotlyjs="cdn")
 
     # 生成雷达图
     radar_chart_html = ""
@@ -233,7 +237,7 @@ def generate_keyfact_check_html_report(file_path, output_path="keyfact_check_rep
             plot_bgcolor='rgba(0,0,0,0)',
             showlegend=True
         )
-        radar_chart_html = fig_radar.to_html(full_html=False)
+        radar_chart_html = fig_radar.to_html(full_html=False, include_plotlyjs="cdn")
 
     # HTML 模板
     html_template = f"""
@@ -242,6 +246,7 @@ def generate_keyfact_check_html_report(file_path, output_path="keyfact_check_rep
     <head>
         <meta charset="utf-8">
         <title>Keyfact Check Report</title>
+        <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
         <style>
             body {{
                 font-family: Arial, sans-serif;
@@ -320,8 +325,4 @@ def generate_keyfact_check_html_report(file_path, output_path="keyfact_check_rep
     </html>
     """
 
-    # 保存为 HTML 文件
-    with open(output_path, "w", encoding="utf-8") as file:
-        file.write(html_template)
-
-    return output_path
+    return html_template

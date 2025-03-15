@@ -74,6 +74,7 @@ def bertscore_results_render(file_path):
             x="category",
             y=metric,
             box=True,  # 显示箱线图
+            color="category",
             points="all",  # 显示所有数据点
             title=f"{metric.capitalize()} by Category",
             labels={"category": "Category", metric: metric.capitalize()}
@@ -122,11 +123,15 @@ def bertscore_results_render(file_path):
     )
     st.plotly_chart(fig_radar)
 
-    if st.button("Generate HTML Report", key="generate_bertscore_results_html_report"):
-        output_path = generate_bertscore_results_html_report(file_path)
-        st.success(f"HTML report generated: {output_path}")
+    if st.download_button(
+        label="Download HTML Report",
+        data=generate_bertscore_results_html_report(file_path),
+        file_name="bertscore_results_report.html",
+        mime="text/html"
+    ):
+        st.success("Download link generated successfully.")
 
-def generate_bertscore_results_html_report(file_path, output_path="bertscore_results_report.html"):
+def generate_bertscore_results_html_report(file_path):
     """生成 BERTScore 数据的 HTML 报告"""
     # 读取数据
     with open(file_path, "r", encoding="utf-8") as f:
@@ -207,12 +212,13 @@ def generate_bertscore_results_html_report(file_path, output_path="bertscore_res
             x="category",
             y=metric,
             template="plotly_white",
+            color="category",
             box=True,
             points="all",
             title=f"{metric.capitalize()} by Category",
             labels={"category": "Category", metric: metric.capitalize()}
         )
-        violin_plots_html += fig_violin.to_html(full_html=False)
+        violin_plots_html += fig_violin.to_html(full_html=False, include_plotlyjs="cdn")
 
     # 计算每个类别的 F1、Precision 和 Recall 的平均值
     category_metrics = {}
@@ -256,7 +262,7 @@ def generate_bertscore_results_html_report(file_path, output_path="bertscore_res
             plot_bgcolor='rgba(0,0,0,0)',
             showlegend=True
         )
-        radar_chart_html = fig_radar.to_html(full_html=False)
+        radar_chart_html = fig_radar.to_html(full_html=False, include_plotlyjs="cdn")
 
     # HTML 模板
     html_template = f"""
@@ -265,6 +271,7 @@ def generate_bertscore_results_html_report(file_path, output_path="bertscore_res
     <head>
         <meta charset="utf-8">
         <title>BERTScore Results Report</title>
+        <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
         <style>
             body {{
                 font-family: Arial, sans-serif;
@@ -341,8 +348,4 @@ def generate_bertscore_results_html_report(file_path, output_path="bertscore_res
     </html>
     """
 
-    # 保存为 HTML 文件
-    with open(output_path, "w", encoding="utf-8") as file:
-        file.write(html_template)
-
-    return output_path
+    return html_template

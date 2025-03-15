@@ -99,28 +99,23 @@ else:
                 data = json.load(file)
             return data
 
+
         def generate_combined_html_report(selected_files):
             """
-            根据用户勾选的子任务生成整合的 HTML 报告
+            根据用户勾选的子任务生成整合的 HTML 报告，并添加侧边栏
             """
             reports = {}
-            report_paths = {}
 
             # 根据用户勾选的子任务生成对应的报告
             if "calender" in selected_files:
                 calendar_data = load_data(selected_files["calender"])
-                report_paths["calender"] = generate_calender_html_report(calendar_data)
+                reports["calender"] = generate_calender_html_report(calendar_data)
             if "meeting" in selected_files:
                 meeting_data = load_data(selected_files["meeting"])
-                report_paths["meeting"] = generate_meeting_html_report(meeting_data)
+                reports["meeting"] = generate_meeting_html_report(meeting_data)
             if "trip" in selected_files:
                 trip_data = load_data(selected_files["trip"])
-                report_paths["trip"] = generate_trip_html_report(trip_data)
-
-            # 读取生成的报告内容
-            for sub_folder, report_path in report_paths.items():
-                with open(report_path, "r", encoding="utf-8") as file:
-                    reports[sub_folder] = file.read()
+                reports["trip"] = generate_trip_html_report(trip_data)
 
             # 创建整合的 HTML 模板
             combined_html = """
@@ -131,57 +126,88 @@ else:
                 <title>Combined Test Reports</title>
                 <style>
                     body {
-                        font-family: Arial, sans-serif;
-                        margin: 40px;
-                        background-color: #f4f4f4;
-                    }
-                    .container {
-                        max-width: 1200px;
-                        margin: 0 auto;
-                        background: white;
-                        padding: 20px;
-                        border-radius: 10px;
-                        box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
-                    }
-                    h1, h2, h3 {
-                        text-align: center;
-                        color: #333;
-                    }
-                    .report-section {
-                        margin-bottom: 40px;
-                    }
-                    .report-section h2 {
-                        background-color: #007BFF;
-                        color: white;
-                        padding: 10px;
-                        border-radius: 5px;
-                    }
+                    font-family: Arial, sans-serif;
+                    margin: 0;
+                    padding: 0;
+                    display: flex;
+                }
+                .sidebar {
+                    width: 250px;
+                    background: #027bff;
+                    color: white;
+                    height: 100vh;
+                    padding-top: 20px;
+                    position: fixed;
+                    overflow-y: auto;
+                }
+                .sidebar h2 {
+                    text-align: center;
+                    margin-bottom: 20px;
+                }
+                .sidebar ul {
+                    list-style: none;
+                    padding: 0;
+                }
+                .sidebar ul li {
+                    padding: 10px;
+                    text-align: center;
+                }
+                .sidebar ul li a {
+                    color: white;
+                    text-decoration: none;
+                    display: block;
+                    padding: 10px;
+                    transition: 0.3s;
+                }
+                .sidebar ul li a:hover {
+                    background: #34495e;
+                }
+                .content {
+                    margin-left: 270px;
+                    padding: 20px;
+                    width: calc(100% - 270px);
+                }
+                .report-section {
+                    display: none;
+                }
+                .active {
+                    display: block;
+                }
                 </style>
+                <script>
+                    function showReport(reportId) {
+                        var sections = document.getElementsByClassName("report-section");
+                        for (var i = 0; i < sections.length; i++) {
+                            sections[i].classList.remove("active");
+                        }
+                        document.getElementById(reportId).classList.add("active");
+                    }
+                </script>
             </head>
             <body>
-                <div>
+                <div class="sidebar">
+                    <h2 style="color:white;">Planning Reports</h2>
+                    <ul>
+            """
+
+            # 生成侧边栏目录
+            for category in reports.keys():
+                display_name = category.replace("_", " ").title()  # 格式化显示名称
+                combined_html += f'<li><a href="#" onclick="showReport(\'{category}\')">{display_name}</a></li>'
+
+            combined_html += """
+                    </ul>
+                </div>
+                <div class="content">
                     <h1>Planning Reports</h1>
             """
 
-            # 动态添加用户勾选的子任务报告
-            if "calender" in reports:
-                combined_html += f"""
-                    <div class="report-section">
-                        {reports["calender"]}
-                    </div>
-                """
-            if "meeting" in reports:
-                combined_html += f"""
-                    <div class="report-section">
-                        {reports["meeting"]}
-                    </div>
-                """
-            if "trip" in reports:
-                combined_html += f"""
-                    <div class="report-section">
-                        {reports["trip"]}
-                    </div>
-                """
+            # 动态添加用户勾选的子任务报告，并默认显示第一个
+            first = True
+            for category, content in reports.items():
+                active_class = "active" if first else ""
+                combined_html += f'<div id="{category}" class="report-section {active_class}">{content}</div>'
+                first = False
 
             combined_html += """
                 </div>
@@ -189,13 +215,12 @@ else:
             </html>
             """
 
-            # 保存整合的 HTML 文件
-            combined_report_path = "combined_report.html"
-            with open(combined_report_path, "w", encoding="utf-8") as file:
-                file.write(combined_html)
+            return combined_html
 
-            return combined_report_path
-
-        if st.button("Generate Combined Test Report"):
-            combined_report_html = generate_combined_html_report(selected_files)
-            st.markdown(combined_report_html, unsafe_allow_html=True)
+        if st.download_button(
+            label="Generate Combined Report",
+            data=generate_combined_html_report(selected_files),
+            file_name="planning_combined_report.html",
+            mime="text/html",
+        ):
+            st.success("Combined report generated successfully!")

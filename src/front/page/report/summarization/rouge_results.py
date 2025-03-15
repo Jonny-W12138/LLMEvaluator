@@ -4,6 +4,7 @@ import streamlit as st
 import plotly.graph_objects as go
 import plotly.figure_factory as ff
 import plotly.express as px
+from pygments.lexer import include
 
 
 def rouge_results_render(file_path):
@@ -146,6 +147,7 @@ def rouge_results_render(file_path):
             rouge_data,
             x="category",
             y=metric,
+            color="category",
             box=True,  # 显示箱线图
             points="all",  # 显示所有数据点
             title=f"{metric.capitalize()} by Category",
@@ -216,11 +218,17 @@ def rouge_results_render(file_path):
     # 显示雷达图
     st.plotly_chart(fig_radar)
 
-    if st.button("Generate HTML report", key="generate_rouge_results_html_report"):
-        generate_rouge_results_html_report(file_path)
+    if st.download_button(
+            label="Download HTML Report",
+            data=generate_rouge_results_html_report(file_path),
+            file_name="rouge_results_report.html",
+            mime="text/html"
+    ):
+        st.success("Download link generated successfully.")
 
 
-def generate_rouge_results_html_report(file_path, output_path="rouge_results_report.html"):
+
+def generate_rouge_results_html_report(file_path):
     """生成 ROUGE 数据的 HTML 报告"""
     import json
     import pandas as pd
@@ -328,7 +336,7 @@ def generate_rouge_results_html_report(file_path, output_path="rouge_results_rep
     ]
     rouge_1_hist_labels = ["F1", "Precision", "Recall"]
     fig_rouge_1 = ff.create_distplot(rouge_1_hist_data, rouge_1_hist_labels, show_hist=False)
-    rouge_1_distplot_html = fig_rouge_1.to_html(full_html=False)
+    rouge_1_distplot_html = fig_rouge_1.to_html(full_html=False, include_plotlyjs="cdn")
 
     rouge_2_hist_data = [
         rouge_data["rouge-2-f"].dropna(),
@@ -337,7 +345,7 @@ def generate_rouge_results_html_report(file_path, output_path="rouge_results_rep
     ]
     rouge_2_hist_labels = ["F1", "Precision", "Recall"]
     fig_rouge_2 = ff.create_distplot(rouge_2_hist_data, rouge_2_hist_labels, show_hist=False)
-    rouge_2_distplot_html = fig_rouge_2.to_html(full_html=False)
+    rouge_2_distplot_html = fig_rouge_2.to_html(full_html=False, include_plotlyjs="cdn")
 
     rouge_l_hist_data = [
         rouge_data["rouge-l-f"].dropna(),
@@ -346,7 +354,7 @@ def generate_rouge_results_html_report(file_path, output_path="rouge_results_rep
     ]
     rouge_l_hist_labels = ["F1", "Precision", "Recall"]
     fig_rouge_l = ff.create_distplot(rouge_l_hist_data, rouge_l_hist_labels, show_hist=False)
-    rouge_l_distplot_html = fig_rouge_l.to_html(full_html=False)
+    rouge_l_distplot_html = fig_rouge_l.to_html(full_html=False, include_plotlyjs="cdn")
 
     # 计算每个类别的指标
     category_metrics = {}
@@ -395,12 +403,13 @@ def generate_rouge_results_html_report(file_path, output_path="rouge_results_rep
                 x="category",
                 y=metric,
                 template="plotly_white",
+                color="category",
                 box=True,
                 points="all",
                 title=f"{metric.capitalize()} by Category",
                 labels={"category": "Category", metric: metric.capitalize()}
             )
-            violin_plots.append(fig_violin.to_html(full_html=False))
+            violin_plots.append(fig_violin.to_html(full_html=False, include_plotlyjs="cdn"))
         violin_plot_html = "".join([f"<div class='chart-container'>{plot}</div>" for plot in violin_plots])
 
     # 生成雷达图：显示各个类别的 ROUGE 指标的平均值
@@ -445,7 +454,7 @@ def generate_rouge_results_html_report(file_path, output_path="rouge_results_rep
             plot_bgcolor='rgba(0,0,0,0)',
             showlegend=True
         )
-        radar_chart_html = fig_radar.to_html(full_html=False)
+        radar_chart_html = fig_radar.to_html(full_html=False, include_plotlyjs="cdn")
 
     # HTML 模板
     html_template = f"""
@@ -454,6 +463,7 @@ def generate_rouge_results_html_report(file_path, output_path="rouge_results_rep
     <head>
         <meta charset="utf-8">
         <title>ROUGE Results Report</title>
+        <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
         <style>
             body {{
                 font-family: Arial, sans-serif;
@@ -556,8 +566,4 @@ def generate_rouge_results_html_report(file_path, output_path="rouge_results_rep
     </html>
     """
 
-    # 保存为 HTML 文件
-    with open(output_path, "w", encoding="utf-8") as file:
-        file.write(html_template)
-
-    return output_path
+    return html_template
