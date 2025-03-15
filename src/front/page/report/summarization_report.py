@@ -155,30 +155,28 @@ if "task" in st.session_state:
             reports = {}
             report_paths = {}
 
-            # 根据用户勾选的评估角度，调用相应的报告生成函数
-            if "summaries" in selected_files:
-                report_paths["summaries"] = generate_summaries_html_report(selected_files["summaries"])
-            if "llm_score" in selected_files:
-                report_paths["llm_score"] = generate_llm_score_html_report(selected_files["llm_score"])
-            if "keyfact_alignment" in selected_files:
-                report_paths["keyfact_alignment"] = generate_keyfact_alignment_html_report(
-                    selected_files["keyfact_alignment"])
-            if "keyfact_check" in selected_files:
-                report_paths["keyfact_check"] = generate_keyfact_check_html_report(selected_files["keyfact_check"])
-            if "rouge_results" in selected_files:
-                report_paths["rouge_results"] = generate_rouge_results_html_report(selected_files["rouge_results"])
-            if "bertscore_results" in selected_files:
-                report_paths["bertscore_results"] = generate_bertscore_results_html_report(
-                    selected_files["bertscore_results"])
-            if "bleurt_results" in selected_files:
-                report_paths["bleurt_results"] = generate_bleurt_results_html_report(selected_files["bleurt_results"])
+            # 评估角度与对应的报告生成函数
+            report_generators = {
+                "summaries": generate_summaries_html_report,
+                "llm_score": generate_llm_score_html_report,
+                "keyfact_alignment": generate_keyfact_alignment_html_report,
+                "keyfact_check": generate_keyfact_check_html_report,
+                "rouge_results": generate_rouge_results_html_report,
+                "bertscore_results": generate_bertscore_results_html_report,
+                "bleurt_results": generate_bleurt_results_html_report,
+            }
 
-            # 读取生成的报告内容
+            # 生成各个评估角度的报告
+            for category, generator in report_generators.items():
+                if category in selected_files:
+                    report_paths[category] = generator(selected_files[category])
+
+            # 读取各个报告的内容
             for category, report_path in report_paths.items():
                 with open(report_path, "r", encoding="utf-8") as file:
                     reports[category] = file.read()
 
-            # 生成 HTML 模板
+            # 生成 HTML 页面
             combined_html = """
                 <!DOCTYPE html>
                 <html>
@@ -188,45 +186,88 @@ if "task" in st.session_state:
                     <style>
                         body {
                             font-family: Arial, sans-serif;
-                            margin: 40px;
-                            background-color: #f4f4f4;
+                            margin: 0;
+                            padding: 0;
+                            display: flex;
                         }
-                        .container {
-                            max-width: 1200px;
-                            margin: 0 auto;
-                            background: white;
-                            padding: 20px;
-                            border-radius: 10px;
-                            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+                        .sidebar {
+                            width: 250px;
+                            background: #027bff;
+                            color: white;
+                            height: 100vh;
+                            padding-top: 20px;
+                            position: fixed;
+                            overflow-y: auto;
                         }
-                        h1 {
+                        .sidebar h2 {
                             text-align: center;
-                            color: #333;
+                            margin-bottom: 20px;
+                        }
+                        .sidebar ul {
+                            list-style: none;
+                            padding: 0;
+                        }
+                        .sidebar ul li {
+                            padding: 10px;
+                            text-align: center;
+                        }
+                        .sidebar ul li a {
+                            color: white;
+                            text-decoration: none;
+                            display: block;
+                            padding: 10px;
+                            transition: 0.3s;
+                        }
+                        .sidebar ul li a:hover {
+                            background: #34495e;
+                        }
+                        .content {
+                            margin-left: 270px;
+                            padding: 20px;
+                            width: calc(100% - 270px);
                         }
                         .report-section {
-                            margin-bottom: 40px;
+                            display: none;
                         }
-                        .report-section h2 {
-                            background-color: #007BFF;
-                            color: white;
-                            padding: 10px;
-                            border-radius: 5px;
+                        .active {
+                            display: block;
                         }
                     </style>
+                    <script>
+                        function showReport(reportId) {
+                            var sections = document.getElementsByClassName("report-section");
+                            for (var i = 0; i < sections.length; i++) {
+                                sections[i].classList.remove("active");
+                            }
+                            document.getElementById(reportId).classList.add("active");
+                        }
+                    </script>
                 </head>
                 <body>
-                    <div class="container">
+                    <div class="sidebar">
+                        <h2 style="color:white;">Evaluation Reports</h2>
+                        <ul>
+                """
+
+            # 生成侧边栏目录
+            for category in reports.keys():
+                display_name = category.replace("_", " ").title()  # 先进行常规格式化
+                display_name = display_name.replace("Llm", "LLM")  # 额外处理 LLM
+                combined_html += f'<li><a href="#" onclick="showReport(\'{category}\')">{display_name}</a></li>'
+
+            combined_html += """
+                        </ul>
+                    </div>
+                    <div class="content">
                         <h1>Evaluation Report</h1>
                 """
 
-            # 动态添加各个评估角度的报告
+            # 生成各个评估角度的内容，并默认显示第一个
+            first = True
             for category, content in reports.items():
-                combined_html += f"""
-                        <div class="report-section">
-                            <h2>{category.replace('_', ' ').title()}</h2>
-                            {content}
-                        </div>
-                    """
+                active_class = "active" if first else ""
+                combined_html += f'<div id="{category}" class="report-section {active_class}">{content}</div>'
+                first = False
 
             combined_html += """
                     </div>
@@ -234,7 +275,7 @@ if "task" in st.session_state:
                 </html>
                 """
 
-            # 保存整合的 HTML 文件
+            # 保存最终 HTML 文件
             combined_report_path = "combined_report.html"
             with open(combined_report_path, "w", encoding="utf-8") as file:
                 file.write(combined_html)
