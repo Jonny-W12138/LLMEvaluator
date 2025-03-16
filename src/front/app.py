@@ -5,6 +5,7 @@ pages = {
         st.Page("page/eval/summarization_eval.py", title="Summarization"),
         st.Page("page/eval/planning_eval.py", title="Planning"),
         st.Page("page/eval/computation_eval.py", title="Computation"),
+        st.Page("page/eval/custom_eval.py", title="Custom Evaluation"),
     ],
     "Report": [
         st.Page("page/report/summarization_report.py", title="Summarization"),
