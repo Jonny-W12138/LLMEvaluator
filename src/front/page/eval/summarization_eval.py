@@ -78,7 +78,7 @@ with st.container(border=True):
             original_model_adapter_path = st.text_input("Adapter path", value="", key="original_model_adapter_path")
 
 # 数据集选择
-with (st.container()):
+with (st.container(border=True)):
     data_path = conf.get("base_config", "summarization", "data_path").strip('"')
     data_config_path = os.path.join(data_path, "data_config.json")
     if not os.path.isfile(data_config_path):
