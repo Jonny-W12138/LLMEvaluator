@@ -5,12 +5,13 @@ pages = {
         st.Page("page/eval/summarization_eval.py", title="Summarization"),
         st.Page("page/eval/planning_eval.py", title="Planning"),
         st.Page("page/eval/computation_eval.py", title="Computation"),
-        st.Page("page/eval/custom_eval.py", title="Custom Evaluation"),
+        st.Page("page/eval/custom_eval.py", title="Custom"),
     ],
     "Report": [
         st.Page("page/report/summarization_report.py", title="Summarization"),
         st.Page("page/report/planning_report.py", title="Planning"),
         st.Page("page/report/computation_report.py", title="Computation"),
+        st.Page("page/report/custom_report.py", title="Custom"),
     ],
 }
 

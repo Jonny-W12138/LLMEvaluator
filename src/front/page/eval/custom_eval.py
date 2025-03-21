@@ -4,7 +4,7 @@ import sys
 import streamlit as st
 import os
 import pandas as pd
-from src.eval.custom.custom import generate_custom_response
+from src.eval.custom.custom import generate_custom_response, evaluate_custom_response
 
 st.header("Custom Evaluation")
 
@@ -174,7 +174,7 @@ with st.container(border=True):
                 "- Custom model should be a Python module with a function that takes a prompt and returns a response.\n"
                 f"- The response should be in JSON format.\n"
                 f"- The response file should be saved in the folder "
-                f"`{os.path.join(os.getcwd(), 'tesks', st.session_state['task'], 'custom', st.session_state['ability'])}`\n"
+                f"`{os.path.join(os.getcwd(), 'tasks', st.session_state['task'], 'custom', st.session_state['ability'])}`\n"
                 f"- The response file should contain `response` field.")
             st.json("{\n"
                     "  \"response\": [\n"
@@ -254,6 +254,7 @@ with st.container(border=True):
                 generate_custom_response(
                     dataset_path=st.session_state["custom_dataset_path"],
                     call_method=model_source,
+                    ability_name=st.session_state["ability"],
                     field_mapping=dataset_field_mapping,
                     api_key=api_key,
                     api_url=api_url,
@@ -268,6 +269,7 @@ with st.container(border=True):
                 generate_custom_response(
                     dataset_path=st.session_state["custom_dataset_path"],
                     call_method=model_source,
+                    ability_name=st.session_state["ability"],
                     field_mapping=dataset_field_mapping,
                     model_name=model_path,
                     model_adapter=original_model_adapter_path if original_model_use_adapter else None,
@@ -281,28 +283,43 @@ with st.container(border=True):
 with st.container(border=True):
     st.write("Evaluation")
 
-    evaluate_field_mapping_df = pd.DataFrame(
-        [
-            {"response_field": "response_field_1", "prompt_field": "prompt_field_1"},
-        ]
-    )
-
-    evaluate_field_mapping = st.data_editor(
-        evaluate_field_mapping_df, num_rows="dynamic"
-    )
-
-    for i, row in evaluate_field_mapping.iterrows():
-        for col in row.index:
-            if pd.isna(row[col]):
-                st.error(f"Column '{col}' cannot be empty.")
-                break
-
-
-    tabs = st.tabs(["LLM", "custom"])
+    tabs = st.tabs(["LLM", "Custom"])
 
 
     with tabs[0]:
         st.write("LLM evaluation")
+
+        evaluate_field_mapping_df = pd.DataFrame(
+            [
+                {"response_field": "response_field_1", "prompt_field": "prompt_field_1"},
+            ]
+        )
+
+        evaluate_field_mapping = st.data_editor(
+            evaluate_field_mapping_df, num_rows="dynamic"
+        )
+
+        use_dataset_field_mapping = st.toggle("Use dataset field mapping", value=True)
+        if use_dataset_field_mapping:
+            dataset_field_mapping_df = pd.DataFrame(
+                [
+                    {"dataset_field": "dataset_field_1", "prompt_field": "prompt_field_1"},
+                ]
+            )
+
+            dataset_field_mapping = st.data_editor(
+                dataset_field_mapping_df, num_rows="dynamic",
+                key="eval_dataset_field_mapping"
+            )
+
+        else:
+            dataset_field_mapping = None
+
+        for i, row in evaluate_field_mapping.iterrows():
+            for col in row.index:
+                if pd.isna(row[col]):
+                    st.error(f"Column '{col}' cannot be empty.")
+                    break
 
         judge_prompt_template = st.text_area(
             "Judge prompt",
@@ -349,6 +366,62 @@ with st.container(border=True):
         with eval_generate_col[2]:
             top_p = st.number_input("Top p", value=1.0, min_value=0.0, step=0.1, key="custom_eval_top_p")
 
+        eval_filepath_col = st.columns(2)
+        with eval_filepath_col[0]:
+            eval_response_path = st.text_input("Response file path", key="custom_eval_filepath")
+
+        if use_dataset_field_mapping:
+            with eval_filepath_col[1]:
+                dataset_path = st.text_input("Dataset path", key="custom_eval_dataset_path")
+        else:
+            dataset_path = None
+
+        if st.button("Evaluate", key="custom_eval_llm"):
+            evaluate_custom_response(
+                dataset_path=dataset_path,
+                response_path=eval_response_path,
+                call_method=model_source,
+                ability_name=st.session_state["ability"],
+                field_mapping=evaluate_field_mapping,
+                dataset_field_mapping=dataset_field_mapping,
+                prompt_template=judge_prompt_template,
+                model_name=model_path,
+                model_adapter=original_model_adapter_path if original_model_use_adapter else None,
+                api_key=api_key,
+                api_url=api_url,
+                model_engine=model_engine,
+                task_name=st.session_state['task'],
+                max_new_token=max_tokens,
+                temperature=temperature,
+                top_p=top_p
+            )
     with tabs[1]:
         st.write("Custom evaluation")
-        st.write("Coming soon...")
+
+        script_path = st.text_input("Path to module(abs path)", key="custom_eval_script_path")
+        function_name = st.text_input("Function name", key="custom_eval_function_name")
+
+        if st.button("Generate", key="evaluate_custom_response"):
+            script_path = os.path.abspath(script_path)
+
+            # 获取模块名称（去掉.py）
+            module_name = os.path.splitext(os.path.basename(script_path))[0]
+
+            # 加载模块
+            spec = importlib.util.spec_from_file_location(module_name, script_path)
+            if spec is None:
+                raise ImportError(f"Could not load module from {script_path}")
+
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[module_name] = module
+            spec.loader.exec_module(module)
+
+            # 获取函数
+            if hasattr(module, function_name):
+                function = getattr(module, function_name)
+            else:
+                raise AttributeError(f"Function '{function_name}' not found in module '{module_name}'")
+
+            with st.spinner("Executing ..."):
+                function()
+            st.success("Successfully generated.")
