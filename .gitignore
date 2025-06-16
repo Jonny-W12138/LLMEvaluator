@@ -184,6 +184,9 @@ models/tool_model/*
 dataset/*
 !dataset/summarization/.gitkeep
 !dataset/planning/calender/.gitkeep
+!dataset/planning/computataion
+!dataset/reasoning
+!dataset/retrieval
 
 
 tasks/*

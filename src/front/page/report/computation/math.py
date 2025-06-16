@@ -174,6 +174,8 @@ def display_math_details(data):
     # 准备表格数据
     details = []
     for index, item in enumerate(data["evaluation"]):
+        if item['success'] == False:
+            continue
         eval_steps = item["evaluation"]["eval_steps"]
         positive_count = sum(1 for step in eval_steps.values() if step["categorie"] == "Positive")
         neutral_count = sum(1 for step in eval_steps.values() if step["categorie"] == "Neutral")
@@ -331,6 +333,8 @@ def generate_math_html_report(data):
     # 生成表格
     details = []
     for index, item in enumerate(data["evaluation"]):
+        if item['success'] == False:
+            continue
         eval_steps = item["evaluation"]["eval_steps"]
         positive_count = sum(1 for step in eval_steps.values() if step["categorie"] == "Positive")
         neutral_count = sum(1 for step in eval_steps.values() if step["categorie"] == "Neutral")

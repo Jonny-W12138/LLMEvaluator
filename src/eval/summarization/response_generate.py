@@ -8,6 +8,7 @@ from openai import OpenAI
 from transformers import pipeline, AutoModelForCausalLM, AutoTokenizer
 from peft import PeftModel, PeftConfig
 import streamlit as st
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 # 模拟子进程逻辑（实际情况下替换为大模型调用逻辑）
@@ -188,10 +189,7 @@ def generate_summaries_model(task_name, selected_data_path, model_path, prompt_t
 
 
 def generate_summaries_api(task_name, selected_data_path, prompt_template, api_url, api_key, model_engine,
-                           field_mapping, max_tokens, temperature, top_p):
-    """
-    Generate summaries using the OpenAI API and save results incrementally.
-    """
+                           field_mapping, max_tokens, temperature, top_p, if_parallel=False, parallel_num=4):
     print("[Generating summaries]", "data_path:", selected_data_path, "prompt:", prompt_template,
           "max_tokens:", max_tokens, "temperature:", temperature, "top_p:", top_p)
 
@@ -203,25 +201,19 @@ def generate_summaries_api(task_name, selected_data_path, prompt_template, api_u
     transcript_field = field_mapping.loc[field_mapping["Field Type"] == "Transcript", "Dataset Field"].values[0]
     client = OpenAI(api_key=api_key, base_url=api_url)
 
-    # 读取数据集
     dataset = pd.read_json(selected_data_path)
     total_data_num = dataset.shape[0]
 
-    st.session_state["log"] = []
-    log_area = st.empty()
     my_bar = st.progress(0)
 
-    success_num = 0
-
-    # 生成文件路径
+    # 初始化输出文件
     current_time = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     save_dir = os.path.join(os.getcwd(), "tasks", task_name, "summarization", "response")
     os.makedirs(save_dir, exist_ok=True)
     output_file = os.path.join(save_dir, f"summaries_{current_time}.json")
 
-    # 初始化 JSON 文件（如果不存在）
-    if not os.path.exists(output_file):
-        metadata = {
+    output_data = {
+        "metadata": {
             "model_source": "API",
             "model_engine": model_engine,
             "api_url": api_url,
@@ -234,36 +226,34 @@ def generate_summaries_api(task_name, selected_data_path, prompt_template, api_u
             "max_tokens": max_tokens,
             "temperature": temperature,
             "top_p": top_p
-        }
-        with open(output_file, "w", encoding="utf-8") as f:
-            json.dump({"metadata": metadata, "results": []}, f, indent=4)
+        },
+        "results": []
+    }
 
-    for i in range(total_data_num):
-        generated_text = ""
-        current_row = dataset.iloc[i]
+    with open(output_file, "w", encoding="utf-8") as f:
+        json.dump(output_data, f, indent=4)
+
+    def process_single(index):
+        current_row = dataset.iloc[index]
         category = current_row['category']
         transcript = current_row[transcript_field]
+        generated_text = ""
 
         try:
             prompt = prompt_template
             for _, row in field_mapping.iterrows():
-                dataset_field = row["Dataset Field"]
                 placeholder = row["Instruction Placeholder"]
-                prompt = prompt.replace(f"{placeholder}", str(current_row[dataset_field]))
+                dataset_field = row["Dataset Field"]
+                prompt = prompt.replace(placeholder, str(current_row[dataset_field]))
 
             response = client.chat.completions.create(
                 model=model_engine,
-                messages=[
-                    {"role": "user", "content": prompt},
-                ],
+                messages=[{"role": "user", "content": prompt}],
                 max_tokens=max_tokens,
                 temperature=temperature,
                 top_p=top_p,
-                n=1,
-                stop=None,
             )
-
-            generated_text = response.choices[0].message.content.strip().replace("\n", "")
+            generated_text = response.choices[0].message.content.strip()
 
             summary = generated_text.replace('```', '')
             start = summary.find('{')
@@ -275,43 +265,81 @@ def generate_summaries_api(task_name, selected_data_path, prompt_template, api_u
                 summary = summary_context['summary']
 
             if not summary:
-                raise ValueError("No 'summary' key found in the JSON data.")
+                raise ValueError("No 'summary' key found.")
 
             result_data = {
-                "record_index": i,
+                "record_index": index,
                 "success": True,
                 "category": category,
                 "transcript": transcript,
                 "model_output": generated_text,
                 "summary": summary
             }
-            success_num += 1
+            return index, result_data, True
 
         except Exception as e:
-            print(f"Error generating summary for record {i}: {e}")
+            print(f"Error at index {index}:", e)
             result_data = {
-                "record_index": i,
+                "record_index": index,
                 "success": False,
                 "category": category,
                 "transcript": transcript,
                 "model_output": generated_text,
                 "summary": ""
             }
-            st.error(f"Error generating summary for record {i}: {e}")
+            return index, result_data, False
 
-        # 读取已有 JSON 文件内容，追加新数据
-        with open(output_file, "r", encoding="utf-8") as f:
-            output_data = json.load(f)
-        output_data["results"].append(result_data)
+    current_progress = 0
+    if if_parallel:
+        with ThreadPoolExecutor(max_workers=parallel_num) as executor:
+            for batch_start in range(0, total_data_num, parallel_num):
+                batch_end = min(batch_start + parallel_num, total_data_num)
+                batch_indices = list(range(batch_start, batch_end))
 
-        # 更新 metadata 统计信息
-        output_data["metadata"]["success_num"] = success_num
-        output_data["metadata"]["failed_num"] = total_data_num - success_num
+                futures = {executor.submit(process_single, idx): idx for idx in batch_indices}
+                results_map = {}
 
-        with open(output_file, "w", encoding="utf-8") as f:
-            json.dump(output_data, f, indent=4)
+                for future in as_completed(futures):
+                    index, result, success = future.result()
+                    results_map[index] = (result, success)
 
-        my_bar.progress((i + 1) / total_data_num, text=f"Processing {i + 1}/{total_data_num}")
-        time.sleep(1)  # 模拟耗时
+                # 按顺序写入
+                with open(output_file, "r", encoding="utf-8") as f:
+                    output_data = json.load(f)
+
+                for i in batch_indices:
+                    result, success = results_map[i]
+                    output_data["results"].append(result)
+                    if success:
+                        output_data["metadata"]["success_num"] += 1
+                    else:
+                        output_data["metadata"]["failed_num"] += 1
+
+                    current_progress += 1
+                    my_bar.progress(current_progress / total_data_num,
+                                    text=f"Processing {current_progress}/{total_data_num}")
+
+                with open(output_file, "w", encoding="utf-8") as f:
+                    json.dump(output_data, f, indent=4)
+
+    else:
+        for i in range(total_data_num):
+            _, result, success = process_single(i)
+
+            with open(output_file, "r", encoding="utf-8") as f:
+                output_data = json.load(f)
+
+            output_data["results"].append(result)
+            if success:
+                output_data["metadata"]["success_num"] += 1
+            else:
+                output_data["metadata"]["failed_num"] += 1
+
+            current_progress += 1
+            my_bar.progress(current_progress / total_data_num,
+                            text=f"Processing {current_progress}/{total_data_num}")
+
+            with open(output_file, "w", encoding="utf-8") as f:
+                json.dump(output_data, f, indent=4)
 
     st.success(f"Summaries generated successfully! Output saved to {output_file}")

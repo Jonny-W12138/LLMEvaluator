@@ -2,6 +2,7 @@ import streamlit as st
 import sys
 import os
 import json
+
 root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../..'))
 # 将根目录添加到sys.path
 sys.path.append(root_dir)
@@ -161,6 +162,14 @@ with st.container(border=True):
             temperature = st.number_input("Temperature", value=0.1, min_value=0.0, step=0.1, key="math_temperature")
         with response_generate_args_col[2]:
             top_p = st.number_input("Top p", value=1.0, min_value=0.0, step=0.1, key="math_top_p")
+
+        if_parallel = False
+        parallel_num = 0
+        if model_source == "API":
+            if_parallel = st.toggle("Parallel", value=False, key="math_parallel")
+            if if_parallel:
+                parallel_num = st.number_input("Parallel number", value=1, min_value=1, key="math_parallel_num")
+
         if st.button("Generate", key="generate_math_response"):
             if 'task' not in st.session_state or st.session_state['task'] is None:
                 st.error("Please select a task first.")
@@ -172,6 +181,8 @@ with st.container(border=True):
                         api_key=api_key,
                         api_url=api_url,
                         model_engine=model_engine,
+                        if_parallel=if_parallel,
+                        parallel_num=parallel_num,
                         task_name=st.session_state['task'],
                         prompt_template=prompt,
                         max_new_token=max_tokens,
@@ -242,6 +253,13 @@ with st.container(border=True):
         with eval_generate_col[2]:
             top_p = st.number_input("Top p", value=1.0, min_value=0.0, step=0.1, key="math_eval_top_p")
 
+        if_parallel = False
+        parallel_num = 0
+        if model_source == "API":
+            if_parallel = st.toggle("Parallel", value=False, key="math_eval_parallel")
+            if if_parallel:
+                parallel_num = st.number_input("Parallel number", value=4, min_value=1, key="math_eval_parallel_num")
+
         if st.button("Evaluate", key="evaluate_math_response"):
             if model_source == "API":
                 evaluate_math_response(
@@ -251,6 +269,8 @@ with st.container(border=True):
                     api_key=api_key,
                     api_url=api_url,
                     model_engine=model_engine,
+                    if_parallel=if_parallel,
+                    parallel_num=parallel_num,
                     prompt_template=eval_prompt,
                     max_new_token=max_tokens,
                     temperature=temperature,

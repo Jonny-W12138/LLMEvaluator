@@ -12,6 +12,7 @@ import time
 import datetime
 import sys
 import ast
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../..'))
 # 将根目录添加到sys.path
@@ -103,69 +104,44 @@ def llm_fact_checking_judge_model(model_path, selected_dataset, task_name, promp
         if_success = True
 
         try:
-            start_idx = generated_text.find('[')
+            cleaned_text = generated_text
 
+            # 尝试解析数组格式
+            start_idx = cleaned_text.find('[')
             if start_idx != -1:
-                end_idx = generated_text.find(']')
-                output = generated_text[start_idx:end_idx + 1]
-                output = output.replace('\n', '')
-                output = ast.literal_eval(output)
+                end_idx = cleaned_text.rfind(']')
+                if end_idx != -1:
+                    json_str = cleaned_text[start_idx:end_idx + 1]
+                    output = json.loads(json_str)
 
-                for out in output:
-                    category = out["category"]
-                    category = category.replace('\n', '').replace('[', '').replace(']', '')
-                    if category.lower() == "no error":
-                        pred_labels.append(0)
-                    else:
-                        pred_labels.append(1)
-                    pred_types.append(category)
-                    pred_quote.append(out["quote"])
+                    for out in output:
+                        category = out["category"].replace('\n', '').replace('[', '').replace(']', '')
+                        pred_labels.append(0 if category.lower() == "no error" else 1)
+                        pred_types.append(category)
+                        pred_quote.append(out.get("quote", ""))
+                    if_success = True
 
-            else:
-                start_idx = generated_text.find('{')
-                end_idx = generated_text.find('}')
-                output = generated_text[start_idx:end_idx + 1]
-                output = output.replace('\n', '')
-                output = ast.literal_eval(output)
+            # 如果不是列表格式，尝试单个对象
+            if not if_success:
+                start_idx = cleaned_text.find('{')
+                if start_idx != -1:
+                    end_idx = cleaned_text.rfind('}')
+                    if end_idx != -1:
+                        json_str = cleaned_text[start_idx:end_idx + 1]
+                        output = json.loads(json_str)
 
-                pred_labels, pred_types = [], []
-                category = output["category"]
-                category = category.replace('\n', '').replace('[', '').replace(']', '')
-                if category.lower() == "no error":
-                    pred_labels.append(0)
-                else:
-                    pred_labels.append(1)
-                pred_types.append(category)
+                        category = output["category"].replace('\n', '').replace('[', '').replace(']', '')
+                        pred_labels.append(0 if category.lower() == "no error" else 1)
+                        pred_types.append(category)
+                        pred_quote.append(output.get("quote", ""))
+                        if_success = True
+
 
         except Exception as e:
-
-            try:
-                subseqs = output.split("category")
-
-                def error_detection(subseq):
-                    detected = False
-                    for error_type in ERROR_TYPES:
-                        if error_type in subseq:
-                            detected = True
-                            detected_type = error_type
-                    if detected:
-                        return 1, error_type
-                    else:
-                        return 0, "no error"
-
-                pred_labels, pred_types = [], []
-                for subseq in subseqs:
-                    error_label, error_type = error_detection(subseq)
-                    pred_labels.append(error_label)
-                    pred_types.append(error_type)
-
-                return pred_labels, pred_types
-
-            except Exception as e:
-                print('parsing error:', e)
-                pred_labels = []
-                pred_types = []
-                if_success = False
+            print('error:', e)
+            pred_labels = []
+            pred_types = []
+            if_success = False
 
         result_data = {
             "record_index": i,
@@ -200,10 +176,8 @@ def llm_fact_checking_judge_model(model_path, selected_dataset, task_name, promp
 
 def llm_fact_checking_judge_api(task_name, selected_dataset, prompt_template, selected_summary_file_path, api_url,
                                 api_key, model_engine,
-                                field_mapping, max_tokens, temperature, top_p):
-    """
-    Generate key facts using LLM model.
-    """
+                                field_mapping, max_tokens, temperature, top_p,
+                                if_parallel=False, parallel_num=4):
     if (field_mapping["Field Type"] == "Ref Summary").sum() != 1 \
             or (field_mapping['Field Type'] == 'Transcript').sum() != 1:
         st.error("Field mapping must contain one 'Ref Summary' and one 'Transcript' field.")
@@ -225,6 +199,7 @@ def llm_fact_checking_judge_api(task_name, selected_dataset, prompt_template, se
     my_bar = st.progress(0)
     client = OpenAI(api_key=api_key, base_url=api_url)
     success_num = 0
+    current_progress = 0
 
     current_time = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     output_dir = os.path.join(os.getcwd(), "tasks", f"{task_name}", "summarization", "evaluation", "llm_judge", "keyfact_check")
@@ -234,10 +209,14 @@ def llm_fact_checking_judge_api(task_name, selected_dataset, prompt_template, se
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump([], f)
 
-    for i in range(46, total_data_num):
-        current_row = summaries_to_judge.iloc[i]
+    def process_single(index):
+        current_row = summaries_to_judge.iloc[index]
         prompt = prompt_template.replace("{{input_text}}", current_row["transcript"])
         prompt = prompt.replace("{{summary_to_judge}}", current_row["summary"])
+
+        if_success = False
+        pred_labels, pred_types, pred_quote = [], [], []
+        generated_text = ""
 
         try:
             response = client.chat.completions.create(
@@ -250,59 +229,40 @@ def llm_fact_checking_judge_api(task_name, selected_dataset, prompt_template, se
                 stop=None,
             )
             generated_text = response.choices[0].message.content.strip().replace("\n", "")
-        except Exception as e:
-            print('API error:', e)
-            generated_text = ""
-            if_success = False
+            cleaned_text = re.sub(r"```json|```", "", generated_text).strip()
 
-        # pred_labels, pred_types, pred_quote = [], [], []
-        # try:
-        #     start_idx = generated_text.find('[')
-        #     if start_idx != -1:
-        #         end_idx = generated_text.find(']')
-        #         output = ast.literal_eval(generated_text[start_idx:end_idx + 1])
-        #         for out in output:
-        #             category = out["category"].replace('\n', '').replace('[', '').replace(']', '')
-        #             pred_labels.append(0 if category.lower() == "no error" else 1)
-        #             pred_types.append(category)
-        #             pred_quote.append(out.get("quote", ""))
-        #     else:
-        #         start_idx = generated_text.find('{')
-        #         end_idx = generated_text.find('}')
-        #         output = ast.literal_eval(generated_text[start_idx:end_idx + 1])
-        #         category = output["category"].replace('\n', '').replace('[', '').replace(']', '')
-        #         pred_labels.append(0 if category.lower() == "no error" else 1)
-        #         pred_types.append(category)
-        #     if_success = True
-        # except Exception as e:
-        #     print('parsing error:', e)
-        #     if_success = False
-
-        pred_labels, pred_types, pred_quote = [], [], []
-        try:
-            start_idx = generated_text.find('[')
+            start_idx = cleaned_text.find('[')
             if start_idx != -1:
-                end_idx = generated_text.find(']')
-                output = ast.literal_eval(generated_text[start_idx:end_idx + 1])
-                for out in output:
-                    category = out["category"].replace('\n', '').replace('[', '').replace(']', '')
-                    pred_labels.append(0 if category.lower() == "no error" else 1)
-                    pred_types.append(category)
-                    pred_quote.append(out.get("quote", ""))
-            else:
-                start_idx = generated_text.find('{')
-                end_idx = generated_text.find('}')
-                output = ast.literal_eval(generated_text[start_idx:end_idx + 1])
-                category = output["category"].replace('\n', '').replace('[', '').replace(']', '')
-                pred_labels.append(0 if category.lower() == "no error" else 1)
-                pred_types.append(category)
-            if_success = True
+                end_idx = cleaned_text.rfind(']')
+                if end_idx != -1:
+                    json_str = cleaned_text[start_idx:end_idx + 1]
+                    output = json.loads(json_str)
+                    for out in output:
+                        category = out["category"].replace('\n', '').replace('[', '').replace(']', '')
+                        pred_labels.append(0 if category.lower() == "no error" else 1)
+                        pred_types.append(category)
+                        pred_quote.append(out.get("quote", ""))
+                    if_success = True
+
+            if not if_success:
+                start_idx = cleaned_text.find('{')
+                if start_idx != -1:
+                    end_idx = cleaned_text.rfind('}')
+                    if end_idx != -1:
+                        json_str = cleaned_text[start_idx:end_idx + 1]
+                        output = json.loads(json_str)
+                        category = output["category"].replace('\n', '').replace('[', '').replace(']', '')
+                        pred_labels.append(0 if category.lower() == "no error" else 1)
+                        pred_types.append(category)
+                        pred_quote.append(output.get("quote", ""))
+                        if_success = True
+
         except Exception as e:
-            print('parsing error:', e)
+            print('error:', e)
             if_success = False
 
         result_data = {
-            "record_index": i,
+            "record_index": index,
             "success": if_success,
             "category": current_row["category"],
             "transcript": current_row["transcript"],
@@ -313,17 +273,47 @@ def llm_fact_checking_judge_api(task_name, selected_dataset, prompt_template, se
             "pred_quote": pred_quote,
         }
 
-        with open(output_file, "r+") as f:
-            data = json.load(f)
-            data.append(result_data)
-            f.seek(0)
-            json.dump(data, f, ensure_ascii=False, indent=4)
+        return index, result_data, if_success
 
-        if if_success:
-            success_num += 1
-        my_bar.progress((i + 1) / total_data_num, text=f"Processing {i + 1}/{total_data_num}")
+    if if_parallel:
+        with ThreadPoolExecutor(max_workers=parallel_num) as executor:
+            for batch_start in range(0, total_data_num, parallel_num):
+                batch_end = min(batch_start + parallel_num, total_data_num)
+                batch_indices = list(range(batch_start, batch_end))
+                futures = {executor.submit(process_single, i): i for i in batch_indices}
 
-        # time.sleep(80)
+                results_map = {}
+                for future in as_completed(futures):
+                    index, result_data, if_success = future.result()
+                    results_map[index] = (result_data, if_success)
+
+                # 写入顺序一致
+                with open(output_file, "r", encoding="utf-8") as f:
+                    current_data = json.load(f)
+
+                for i in batch_indices:
+                    result_data, if_success = results_map[i]
+                    current_data.append(result_data)
+                    if if_success:
+                        success_num += 1
+                    current_progress += 1
+                    my_bar.progress(current_progress / total_data_num, text=f"Processing {current_progress}/{total_data_num}")
+
+                with open(output_file, "w", encoding="utf-8") as f:
+                    json.dump(current_data, f, ensure_ascii=False, indent=4)
+    else:
+        for i in range(total_data_num):
+            _, result_data, if_success = process_single(i)
+            with open(output_file, "r+", encoding="utf-8") as f:
+                data = json.load(f)
+                data.append(result_data)
+                f.seek(0)
+                json.dump(data, f, ensure_ascii=False, indent=4)
+
+            if if_success:
+                success_num += 1
+            current_progress += 1
+            my_bar.progress(current_progress / total_data_num, text=f"Processing {current_progress}/{total_data_num}")
 
     st.success(f"Results saved to {output_file}")
 
@@ -511,9 +501,12 @@ def llm_fact_alignment_judge_model(model_path, selected_dataset, task_name, prom
     st.success(f"Results saved to {output_file}")
 
 
+
+
 def llm_fact_alignment_judge_api(task_name, selected_dataset, prompt_template, selected_summary_file_path, api_url,
                                  api_key, model_engine,
-                                 field_mapping, max_tokens, temperature, top_p):
+                                 field_mapping, max_tokens, temperature, top_p,
+                                 if_parallel=False, parallel_num=4):
     if prompt_template.count('{{summary_to_judge}}') != 1:
         st.error("Prompt template must contain one '{{summary_to_judge}}' placeholder.")
         return
@@ -532,7 +525,7 @@ def llm_fact_alignment_judge_api(task_name, selected_dataset, prompt_template, s
                      "Check dataset/summarization/data_config.json.")
             return
 
-        keyfacts_data_path = datasets[selected_dataset]["keyfacts_path"]
+    keyfacts_data_path = datasets[selected_dataset]["keyfacts_path"]
 
     with open(keyfacts_data_path, 'r') as f:
         keyfacts_data = json.load(f)
@@ -554,11 +547,10 @@ def llm_fact_alignment_judge_api(task_name, selected_dataset, prompt_template, s
     client = OpenAI(api_key=api_key, base_url=api_url)
 
     current_time = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    os.makedirs(os.path.join(os.getcwd(), "tasks", f"{task_name}", "summarization", "evaluation", "llm_judge", "keyfact_alignment"), exist_ok=True)
-    output_file = os.path.join(os.getcwd(), "tasks", f"{task_name}", "summarization", "evaluation", "llm_judge", "keyfact_alignment",
-                               f"keyfact_alignment-{current_time}.json")
+    output_dir = os.path.join(os.getcwd(), "tasks", f"{task_name}", "summarization", "evaluation", "llm_judge", "keyfact_alignment")
+    os.makedirs(output_dir, exist_ok=True)
+    output_file = os.path.join(output_dir, f"keyfact_alignment-{current_time}.json")
 
-    # 初始化 JSON 文件，写入元数据
     output_data = {
         "metadata": {
             "model_source": "API",
@@ -580,15 +572,12 @@ def llm_fact_alignment_judge_api(task_name, selected_dataset, prompt_template, s
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(output_data, f, ensure_ascii=False, indent=4)
 
-    for i in range(total_data_num):
-        summary_current_row = summaries_to_judge.iloc[i]
-        keyfacts_current_row = keyfacts.iloc[i]
+    def process_single(index):
+        summary_row = summaries_to_judge.iloc[index]
+        keyfacts_row = keyfacts.iloc[index]
 
-        prompt = prompt_template.replace("{{summary_to_judge}}", summary_current_row["summary"].replace(". ", ".\n"))
-
-        keyfacts_list = keyfacts_current_row["key_facts"]
-        keyfacts_str = "\n".join(keyfacts_list)
-
+        prompt = prompt_template.replace("{{summary_to_judge}}", summary_row["summary"].replace(". ", ".\n"))
+        keyfacts_str = "\n".join(keyfacts_row["key_facts"])
         prompt = prompt.replace("{{ref_keyfacts}}", keyfacts_str)
 
         pred_labels = []
@@ -609,72 +598,105 @@ def llm_fact_alignment_judge_api(task_name, selected_dataset, prompt_template, s
             generated_text = response.choices[0].message.content.strip().replace("\n", "")
             output = generated_text.replace('```', '')
 
-            # 找到 JSON 数组的起始位置
             start_idx = output.find('[')
             if start_idx != -1:
-                # 提取 JSON 部分
                 json_str = output[start_idx:]
-                # 使用 json.loads 解析 JSON
                 output = json.loads(json_str)
 
-                matched_lines = set()
-                pred_labels = []
-
-                # 遍历解析后的数据
                 for out in output:
-                    category = out["response"]
+                    category = out.get("response", "")
+                    pred_labels.append(1 if category.lower() == "yes" else 0)
 
-                    if category.lower() == "yes":
-                        pred_labels.append(1)
-                    else:
-                        pred_labels.append(0)
-
-                    if 'line number' in out:
-                        line_nums = out["line number"]
-                        for line_num in line_nums:
-                            if isinstance(line_num, str):
-                                line_num = line_num.replace('[', '').replace(']', '')
+                    line_nums = out.get("line number", [])
+                    for line_num in line_nums:
+                        if isinstance(line_num, str):
+                            line_num = line_num.replace('[', '').replace(']', '')
+                        try:
                             matched_lines.add(int(line_num))
+                        except ValueError:
+                            continue
 
             result = {
-                "record_index": i,
+                "record_index": index,
                 "success": True,
-                "category": summary_current_row["category"],
-                "summary": summary_current_row["summary"],
-                "keyfacts": keyfacts_current_row["key_facts"],
+                "category": summary_row["category"],
+                "summary": summary_row["summary"],
+                "keyfacts": keyfacts_row["key_facts"],
                 "model_output": generated_text,
                 "pred_labels": pred_labels,
                 "matched_lines": list(matched_lines)
             }
-            output_data["metadata"]["success_num"] += 1
+            success = True
 
         except Exception as e:
-            print('Parsing error:', e)
+            print(f'Error at index {index}:', e)
             result = {
-                "record_index": i,
+                "record_index": index,
                 "success": False,
-                "category": summary_current_row["category"],
-                "summary": summary_current_row["summary"],
-                "keyfacts": keyfacts_current_row["key_facts"],
-                "model_output": generated_text if 'generated_text' in locals() else "",
+                "category": summary_row["category"],
+                "summary": summary_row["summary"],
+                "keyfacts": keyfacts_row["key_facts"],
+                "model_output": generated_text,
                 "pred_labels": [],
                 "matched_lines": []
             }
-            output_data["metadata"]["failed_num"] += 1
+            success = False
 
-        # 读取现有文件内容并追加数据
-        with open(output_file, "r", encoding="utf-8") as f:
-            existing_data = json.load(f)
+        return index, result, success
 
-        existing_data["results"].append(result)
+    current_progress = 0
 
-        # 立即写入文件
-        with open(output_file, "w", encoding="utf-8") as f:
-            json.dump(existing_data, f, ensure_ascii=False, indent=4)
+    if if_parallel:
+        with ThreadPoolExecutor(max_workers=parallel_num) as executor:
+            for batch_start in range(0, total_data_num, parallel_num):
+                batch_end = min(batch_start + parallel_num, total_data_num)
+                batch_indices = list(range(batch_start, batch_end))
+                futures = {executor.submit(process_single, idx): idx for idx in batch_indices}
 
-        my_bar.progress((i + 1) / total_data_num, text=f"Processing {i + 1}/{total_data_num}")
+                results_map = {}
+                for future in as_completed(futures):
+                    index, result, success = future.result()
+                    results_map[index] = (result, success)
+
+                # 统一按顺序追加保存结果
+                with open(output_file, "r", encoding="utf-8") as f:
+                    current_data = json.load(f)
+
+                for i in batch_indices:
+                    result, success = results_map[i]
+                    current_data["results"].append(result)
+                    if success:
+                        current_data["metadata"]["success_num"] += 1
+                    else:
+                        current_data["metadata"]["failed_num"] += 1
+                    current_progress += 1
+                    my_bar.progress(current_progress / total_data_num,
+                                    text=f"Processing {current_progress}/{total_data_num}")
+
+                with open(output_file, "w", encoding="utf-8") as f:
+                    json.dump(current_data, f, ensure_ascii=False, indent=4)
+    else:
+        for i in range(total_data_num):
+            _, result, success = process_single(i)
+            with open(output_file, "r", encoding="utf-8") as f:
+                current_data = json.load(f)
+
+            current_data["results"].append(result)
+            if success:
+                current_data["metadata"]["success_num"] += 1
+            else:
+                current_data["metadata"]["failed_num"] += 1
+            current_progress += 1
+            my_bar.progress(current_progress / total_data_num,
+                            text=f"Processing {current_progress}/{total_data_num}")
+
+            with open(output_file, "w", encoding="utf-8") as f:
+                json.dump(current_data, f, ensure_ascii=False, indent=4)
 
     st.success(f"Results saved to {output_file}")
+
+
+
 
 def count_sentences(text):
     sentences = re.split(r'(?<!\d)\.(?!\d)', text)  # 按句号分割，排除小数点
