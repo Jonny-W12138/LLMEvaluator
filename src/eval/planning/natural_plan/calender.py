@@ -1,14 +1,15 @@
 import json
 import os
 import random
-from datetime import datetime, timedelta
+from datetime import datetime
 import streamlit as st
-from matplotlib.style.core import available
 from openai import OpenAI
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 from peft import PeftModel, PeftConfig
 import torch
 from src.eval.utils import init_model_pipe, get_model_response, get_api_response
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 
 
 # Utility functions
@@ -308,20 +309,19 @@ def generate_calender_response_model(dataset_path, model_name, model_adapter, ta
     st.success(f"Calender response generated successfully! See {save_file}.")
 
 def generate_calender_response_api(dataset_path, api_key, api_url, model_engine, task_name,
-                                  prompt_template, max_new_token, temperature, top_p):
+                                    prompt_template, max_new_token, temperature, top_p,
+                                    if_parallel=True, parallel_num=4):
+
     required_fields = ["{{num_people}}", "{{duration_mins}}", "{{available_days}}", "{{busy_blocks}}"]
     if not all(field in prompt_template for field in required_fields):
         raise ValueError(f"Prompt template must contain all required fields: {required_fields}")
 
     with open(dataset_path, "r", encoding="utf-8") as file:
         data = json.load(file)
-
     problems = data["problems"]
-
     total_data_num = len(problems)
 
-    current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-
+    current_time = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     save_folder = os.path.join(os.getcwd(), "tasks", task_name, "planning", "calender", "response")
     os.makedirs(save_folder, exist_ok=True)
     save_file = os.path.join(save_folder, f"calender_response_{current_time}.json")
@@ -337,13 +337,18 @@ def generate_calender_response_api(dataset_path, api_key, api_url, model_engine,
         "top_p": top_p
     }
 
+    with open(save_file, "w", encoding="utf-8") as file:
+        json.dump({
+            "metadata": metadata,
+            "response": []
+        }, file, indent=4, ensure_ascii=False)
+
     client = OpenAI(api_key=api_key, base_url=api_url)
-
     mybar = st.progress(0)
+    current_progress = 0
 
-    responses = []
-
-    for i, problem in enumerate(problems):
+    def process_single(index):
+        problem = problems[index]
         available_days = ", ".join(problem["problem"]["parameters"]["available_days"])
         busy_blocks = ""
 
@@ -357,44 +362,30 @@ def generate_calender_response_api(dataset_path, api_key, api_url, model_engine,
             .replace("{{available_days}}", available_days) \
             .replace("{{busy_blocks}}", busy_blocks)
 
-        messages = [
-            {"role": "user", "content": prompt}
-        ]
-
-        kwargs = {
-            "text_inputs": messages,
-            "max_new_tokens": max_new_token,
-            "top_p": top_p
-        }
-
-        if temperature == 0.0:
-            kwargs["do_sample"] = False
-        else:
-            kwargs["temperature"] = temperature
-
-        llm_output = ""
         origin_output = ""
+        llm_output = ""
 
         try:
-            llm_output = client.chat.completions.create(
+            response = client.chat.completions.create(
                 model=model_engine,
-                messages=[
-                    {"role": "user", "content": prompt},
-                ],
+                messages=[{"role": "user", "content": prompt}],
                 max_tokens=max_new_token,
                 temperature=temperature,
                 top_p=top_p,
             )
 
-            llm_output = llm_output.choices[0].message.content.strip().replace("\n", "")
+            origin_output = response.choices[0].message.content.strip()
+            clean_output = origin_output.replace("\n", "").replace("```", "")
 
-            origin_output = llm_output
-            json_start = llm_output.index("{")
-            json_end = llm_output.rindex("}") + 1
-            llm_output = llm_output[json_start:json_end]
-            parsed_output = json.loads(llm_output)
+            start = clean_output.find("{")
+            end = clean_output.rfind("}")
+            parsed_output = {}
 
-            response = {
+            if start != -1 and end != -1:
+                llm_output = clean_output[start:end + 1]
+                parsed_output = json.loads(llm_output)
+
+            result = {
                 "metadata": problem["metadata"],
                 "success": True,
                 "problem": problem['problem'],
@@ -402,8 +393,11 @@ def generate_calender_response_api(dataset_path, api_key, api_url, model_engine,
                 "origin_output": origin_output,
                 "llm_output": parsed_output,
             }
+            return index, result, True
+
         except Exception as e:
-            response = {
+            print(f"[ERROR index {index}]:", e)
+            result = {
                 "metadata": problem["metadata"],
                 "success": False,
                 "problem": problem['problem'],
@@ -411,22 +405,58 @@ def generate_calender_response_api(dataset_path, api_key, api_url, model_engine,
                 "origin_output": origin_output,
                 "llm_output": llm_output,
             }
-            print(e)
+            return index, result, False
 
-        responses.append(response)
-        mybar.progress((i + 1) / total_data_num, text=f"Processing {i + 1}/{total_data_num}")
+    if if_parallel:
+        with ThreadPoolExecutor(max_workers=parallel_num) as executor:
+            for batch_start in range(0, total_data_num, parallel_num):
+                batch_end = min(batch_start + parallel_num, total_data_num)
+                batch_indices = list(range(batch_start, batch_end))
 
-        with open(save_file, "w", encoding="utf-8") as file:
-            json.dump({
-                "metadata": metadata,
-                "response": responses
-            }, file, indent=4, ensure_ascii=False)
+                futures = {executor.submit(process_single, idx): idx for idx in batch_indices}
+                results_map = {}
 
-    st.success(f"Calender response generated successfully! See {save_file}.")
+                for future in as_completed(futures):
+                    index, result, success = future.result()
+                    results_map[index] = (result, success)
+
+                # 写入 JSON 按顺序
+                with open(save_file, "r", encoding="utf-8") as file:
+                    existing_data = json.load(file)
+
+                for i in batch_indices:
+                    result, success = results_map[i]
+                    existing_data["response"].append(result)
+
+                    current_progress += 1
+                    mybar.progress(current_progress / total_data_num,
+                                   text=f"Processing {current_progress}/{total_data_num}")
+
+                with open(save_file, "w", encoding="utf-8") as file:
+                    json.dump(existing_data, file, indent=4, ensure_ascii=False)
+
+    else:
+        for i in range(total_data_num):
+            _, result, _ = process_single(i)
+
+            with open(save_file, "r", encoding="utf-8") as file:
+                existing_data = json.load(file)
+
+            existing_data["response"].append(result)
+            current_progress += 1
+            mybar.progress(current_progress / total_data_num,
+                           text=f"Processing {current_progress}/{total_data_num}")
+
+            with open(save_file, "w", encoding="utf-8") as file:
+                json.dump(existing_data, file, indent=4, ensure_ascii=False)
+
+    st.success(f"Calendar response generated successfully! See {save_file}.")
 
 def generate_calender_response(dataset_path, task_name, prompt_template, max_new_token, temperature, top_p,
-                              call_method=None, model_name=None, model_adapter=None,
-                              api_key=None, api_url=None, model_engine=None):
+                               call_method=None, model_name=None, model_adapter=None,
+                               api_key=None, api_url=None, model_engine=None,
+                               if_parallel=False, parallel_num=4):
+
     if call_method is None:
         raise ValueError("call_method must be provided.")
 
@@ -436,13 +466,10 @@ def generate_calender_response(dataset_path, task_name, prompt_template, max_new
 
     with open(dataset_path, "r", encoding="utf-8") as file:
         data = json.load(file)
-
     problems = data["problems"]
-
     total_data_num = len(problems)
 
     current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-
     save_folder = os.path.join(os.getcwd(), "tasks", task_name, "planning", "calender", "response")
     os.makedirs(save_folder, exist_ok=True)
     save_file = os.path.join(save_folder, f"calender_response_{current_time}.json")
@@ -451,7 +478,6 @@ def generate_calender_response(dataset_path, task_name, prompt_template, max_new
         if not model_name:
             raise ValueError("model_name must be provided for 'huggingface/local' call method.")
         pipe = init_model_pipe(model_name, model_adapter)
-
         metadata = {
             "dataset": dataset_path,
             "model_name": model_name,
@@ -467,7 +493,6 @@ def generate_calender_response(dataset_path, task_name, prompt_template, max_new
         if not (api_key and api_url and model_engine):
             raise ValueError("api_key, api_url, and model_engine must be provided for 'API' call method.")
         client = OpenAI(api_key=api_key, base_url=api_url)
-
         metadata = {
             "dataset": dataset_path,
             "api_url": api_url,
@@ -482,26 +507,33 @@ def generate_calender_response(dataset_path, task_name, prompt_template, max_new
     else:
         raise ValueError(f"Invalid call_method: {call_method}. Must be 'huggingface/local' or 'API'.")
 
+    with open(save_file, "w", encoding="utf-8") as file:
+        json.dump({
+            "metadata": metadata,
+            "response": []
+        }, file, indent=4, ensure_ascii=False)
+
     mybar = st.progress(0)
+    current_progress = 0
 
-    responses = []
-
-    for i, problem in enumerate(problems):
+    def prepare_prompt(problem):
         available_days = ", ".join(problem["problem"]["parameters"]["available_days"])
         busy_blocks = ""
-
         for participant in problem["problem"]["participants"]:
             busy_blocks += f"{participant['name']} is busy when:\n"
             for block in participant["busy_blocks"]:
                 busy_blocks += f"- {block['day']}, {block['start']} - {block['end']}\n"
-
         prompt = prompt_template.replace("{{num_people}}", str(problem["metadata"]["num_people"])) \
             .replace("{{duration_mins}}", str(problem["metadata"]["duration_mins"])) \
             .replace("{{available_days}}", available_days) \
             .replace("{{busy_blocks}}", busy_blocks)
+        return prompt
 
-        llm_output = ""
+    def process_single(index):
+        problem = problems[index]
+        prompt = prepare_prompt(problem)
         origin_output = ""
+        llm_output = ""
 
         try:
             if call_method == "huggingface/local":
@@ -510,43 +542,69 @@ def generate_calender_response(dataset_path, task_name, prompt_template, max_new
                 llm_output = get_api_response(client, prompt, model_engine, max_new_token, temperature, top_p)
 
             origin_output = llm_output
-            json_start = llm_output.index("{")
-            json_end = llm_output.rindex("}") + 1
-
+            json_start = llm_output.find("{")
+            json_end = llm_output.rfind("}")
             if json_start == -1 or json_end == -1:
                 raise ValueError("Invalid JSON format")
-            llm_output = llm_output[json_start:json_end]
-            parsed_output = json.loads(llm_output)
+            parsed_output = json.loads(llm_output[json_start:json_end + 1])
 
             response = {
                 "metadata": problem["metadata"],
                 "success": True,
-                "problem": problem['problem'],
+                "problem": problem["problem"],
                 "prompt": prompt,
                 "origin_output": origin_output,
                 "llm_output": parsed_output,
             }
         except Exception as e:
+            print(f"[ERROR index {index}]:", e)
             response = {
                 "metadata": problem["metadata"],
                 "success": False,
-                "problem": problem['problem'],
+                "problem": problem["problem"],
                 "prompt": prompt,
                 "origin_output": origin_output,
                 "llm_output": llm_output,
             }
-            print(e)
 
-        responses.append(response)
-        mybar.progress((i + 1) / total_data_num, text=f"Processing {i + 1}/{total_data_num}")
+        return index, response
 
-        with open(save_file, "w", encoding="utf-8") as file:
-            json.dump({
-                "metadata": metadata,
-                "response": responses
-            }, file, indent=4, ensure_ascii=False)
+    if call_method == "API" and if_parallel:
+        with ThreadPoolExecutor(max_workers=parallel_num) as executor:
+            for batch_start in range(0, total_data_num, parallel_num):
+                batch_indices = list(range(batch_start, min(batch_start + parallel_num, total_data_num)))
+                futures = {executor.submit(process_single, i): i for i in batch_indices}
+                batch_results = {}
 
-    st.success(f"Calender response generated successfully! See {save_file}.")
+                for future in as_completed(futures):
+                    index, result = future.result()
+                    batch_results[index] = result
+
+                with open(save_file, "r", encoding="utf-8") as file:
+                    existing_data = json.load(file)
+
+                for i in batch_indices:
+                    existing_data["response"].append(batch_results[i])
+                    current_progress += 1
+                    mybar.progress(current_progress / total_data_num,
+                                   text=f"Processing {current_progress}/{total_data_num}")
+
+                with open(save_file, "w", encoding="utf-8") as file:
+                    json.dump(existing_data, file, indent=4, ensure_ascii=False)
+
+    else:
+        for i in range(total_data_num):
+            _, result = process_single(i)
+            with open(save_file, "r", encoding="utf-8") as file:
+                existing_data = json.load(file)
+            existing_data["response"].append(result)
+            current_progress += 1
+            mybar.progress(current_progress / total_data_num,
+                           text=f"Processing {current_progress}/{total_data_num}")
+            with open(save_file, "w", encoding="utf-8") as file:
+                json.dump(existing_data, file, indent=4, ensure_ascii=False)
+
+    st.success(f"Calendar response generated successfully! See {save_file}.")
 
 def validate_solution(proposed_time, test_case):
     """Validate the proposed solution."""

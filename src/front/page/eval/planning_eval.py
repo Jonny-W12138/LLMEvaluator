@@ -2,7 +2,6 @@ import streamlit as st
 import sys
 import os
 import configparser
-
 root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../..'))
 # 将根目录添加到sys.path
 sys.path.append(root_dir)
@@ -146,21 +145,29 @@ with st.container(border=True):
                 temperature = st.number_input("Temperature", value=0.1, min_value=0.0, step=0.1)
             with response_generate_args_col[2]:
                 top_p = st.number_input("Top p", value=1.0, min_value=0.0, step=0.1)
+
+            if model_source == "API":
+                if_parallel = st.toggle("Parallel", value=False, key="trip_if_parallel")
+                parallel_num = 0
+                if if_parallel:
+                    parallel_num = st.number_input("Parallel num", value=4, min_value=1, step=1, key="trip_parallel_num")
             if st.button("Generate", key="generate_trip_response"):
                 if 'task' not in st.session_state or st.session_state['task'] is None:
                     st.error("Please select a task first.")
                 else:
                     if model_source == "API":
                         generate_trip_response_api(
-                            dataset_path,
-                            api_key,
-                            api_url,
-                            model_engine,
-                            st.session_state['task'],
-                            prompt,
-                            max_tokens,
-                            temperature,
-                            top_p
+                            dataset_path=dataset_path,
+                            api_key=api_key,
+                            api_url=api_url,
+                            model_engine=model_engine,
+                            if_parallel=if_parallel,
+                            parallel_num=parallel_num,
+                            task_name=st.session_state['task'],
+                            prompt_template=prompt,
+                            max_new_token=max_tokens,
+                            temperature=temperature,
+                            top_p=top_p
                         )
                     else:
                         generate_trip_response_model(
@@ -197,6 +204,7 @@ with st.container(border=True):
 
                 if st.button("Evaluate", key="evaluate_trip_response"):
                     evaluate_trip_response(trip_file_path, st.session_state['task'])
+                    st.success(f"Trip response {selected_trip_file} evaluated successfully.")
 
     with meeting_tab:
         st.write("Meeting")
@@ -264,26 +272,34 @@ with st.container(border=True):
 
             response_generate_args_col = st.columns(3)
             with response_generate_args_col[0]:
-                max_tokens = st.number_input("Max tokens", value=600, min_value=1, key="meeting_max_tokens")
+                max_tokens = st.number_input("Max tokens", value=1200, min_value=1, key="meeting_max_tokens")
             with response_generate_args_col[1]:
                 temperature = st.number_input("Temperature", value=0.1, min_value=0.0, step=0.1, key="meeting_temperature")
             with response_generate_args_col[2]:
                 top_p = st.number_input("Top p", value=1.0, min_value=0.0, step=0.1, key="meeting_top_p")
+
+            if model_source == "API":
+                if_parallel = st.toggle("Parallel", value=False, key="meeting_if_parallel")
+                parallel_num = 0
+                if if_parallel:
+                    parallel_num = st.number_input("Parallel num", value=4, min_value=1, step=1, key="meeting_parallel_num")
             if st.button("Generate", key="generate_meeting_response"):
                 if 'task' not in st.session_state or st.session_state['task'] is None:
                     st.error("Please select a task first.")
                 else:
                     if model_source == "API":
                         generate_meeting_response_api(
-                            dataset_path,
-                            api_key,
-                            api_url,
-                            model_engine,
-                            st.session_state['task'],
-                            prompt,
-                            max_tokens,
-                            temperature,
-                            top_p
+                            dataset_path=dataset_path,
+                            api_key=api_key,
+                            api_url=api_url,
+                            if_parallel=if_parallel,
+                            parallel_num=parallel_num,
+                            model_engine=model_engine,
+                            task_name=st.session_state['task'],
+                            prompt_template=prompt,
+                            max_new_token=max_tokens,
+                            temperature=temperature,
+                            top_p=top_p
                         )
                         pass
                     else:
@@ -430,6 +446,12 @@ with st.container(border=True):
                 temperature = st.number_input("Temperature", value=0.1, min_value=0.0, step=0.1, key="calender_temperature")
             with response_generate_args_col[2]:
                 top_p = st.number_input("Top p", value=1.0, min_value=0.0, step=0.1, key="calender_top_p")
+
+            if_parallel = st.toggle("Parallel", value=False, key="calender_parallel")
+            parallel_num = 0
+            if if_parallel:
+                parallel_num = st.number_input("Parallel num", value=4, min_value=1, step=1, key="calender_parallel_num")
+
             if st.button("Generate", key="generate_calender_response"):
                 if 'task' not in st.session_state or st.session_state['task'] is None:
                     st.error("Please select a task first.")
@@ -440,6 +462,8 @@ with st.container(border=True):
                             call_method=model_source,
                             api_key=api_key,
                             api_url=api_url,
+                            if_parallel=if_parallel,
+                            parallel_num=parallel_num,
                             model_engine=model_engine,
                             task_name=st.session_state['task'],
                             prompt_template=prompt,

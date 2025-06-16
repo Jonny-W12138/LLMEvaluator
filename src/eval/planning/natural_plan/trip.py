@@ -9,6 +9,7 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 from peft import PeftModel, PeftConfig
 import streamlit as st
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 def generate_trip_problem(trip_data_config, config_df):
     """
@@ -43,7 +44,7 @@ def generate_trip_problem(trip_data_config, config_df):
             if not (2 <= max_stay <= 7):
                 raise ValueError("max_stay must between 2 and 7")
             if not (1 <= constraint_days <= num_cities):
-                raise ValueError("constraint_daysmust between 1 and num_cities")
+                raise ValueError("constraint_days must between 1 and num_cities")
             if not (0 <= direct_flight_rate <= 1):
                 raise ValueError("direct_flight_rate must between 0 and 1")
             if trips_amount < 1:
@@ -233,7 +234,7 @@ def generate_trip_response_model(dataset_path, model_name, model_adapter, task_n
         for city_a, connections in flights.items():
             for city_b, is_direct in connections.items():
                 if is_direct:
-                    flight_requirements.append(f"{city_a} and {city_b}")
+                    flight_requirements.append(f"from {city_a} to {city_b}")
         flight_requirements = ", ".join(flight_requirements) + "."
 
         prompt = prompt_template.replace("{{city_nums}}", str(city_nums)) \
@@ -303,8 +304,9 @@ def generate_trip_response_model(dataset_path, model_name, model_adapter, task_n
 
 
 def generate_trip_response_api(dataset_path, api_key, api_url, model_engine, task_name,
-                               prompt_template, max_new_token, temperature, top_p):
-    # 检查 prompt_template 是否包含所有需要的字段
+                               prompt_template, max_new_token, temperature, top_p,
+                               if_parallel=False, parallel_num=4):
+
     required_fields = ["{{city_nums}}", "{{total_day}}", "{{stay_requirements}}", "{{flight_requirements}}"]
     for field in required_fields:
         if field not in prompt_template:
@@ -312,11 +314,9 @@ def generate_trip_response_api(dataset_path, api_key, api_url, model_engine, tas
             return
 
     with open(dataset_path, "r") as f:
-        data = json.load(f)
-    data = data["data"]
+        all_data = json.load(f)["data"]
 
-    total_data_num = len(data)
-
+    total_data_num = len(all_data)
     current_time = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
     save_folder = os.path.join(os.getcwd(), "tasks", task_name, "planning", "trip", "response")
@@ -334,105 +334,137 @@ def generate_trip_response_api(dataset_path, api_key, api_url, model_engine, tas
         "top_p": top_p
     }
 
-    responses = []
-
     client = OpenAI(api_key=api_key, base_url=api_url)
 
+    with open(save_file, "w") as f:
+        json.dump({"metadata": metadata, "responses": []}, f, indent=4)
+
     my_bar = st.progress(0)
+    progress = 0
 
-    for item in data:
-        item_config = item["config"]
-        item_problem = item["problem"]
-        cities = item_problem["cities"]
-        stays = item_problem["stays"]
-        flights = item_problem["flights"]
-        constraint = item_problem["constraint"]
+    def build_prompt(item):
+        cities = item["problem"]["cities"]
+        stays = item["problem"]["stays"]
+        flights = item["problem"]["flights"]
+        constraint = item["problem"]["constraint"]
 
-        # 替换 prompt_template 中的字段
         city_nums = len(cities)
         total_day = sum(stays.values())
-        stay_requirements = []
+
+        stay_reqs = []
         for city, days in stays.items():
-            stay_req = f"You would like to visit {city} for {days} days."
+            sentence = f"You would like to visit {city} for {days} days."
             if city == constraint["city"]:
                 start_day, end_day = constraint["days"]
                 if start_day == end_day:
-                    stay_req += f" You want to meet a friend in {city} in day {start_day}."
+                    sentence += f" You want to meet a friend in {city} in day {start_day}."
                 else:
-                    stay_req += f" You want to meet a friend in {city} between day {start_day} and day {end_day}."
-            stay_requirements.append(stay_req)
-        stay_requirements = "\n".join(stay_requirements)
+                    sentence += f" You want to meet a friend in {city} between day {start_day} and day {end_day}."
+            stay_reqs.append(sentence)
 
-        flight_requirements = []
+        stay_requirements = "\n".join(stay_reqs)
+
+        flight_reqs = []
         for city_a, connections in flights.items():
             for city_b, is_direct in connections.items():
                 if is_direct:
-                    flight_requirements.append(f"{city_a} and {city_b}")
-        flight_requirements = ", ".join(flight_requirements) + "."
+                    flight_reqs.append(f"from {city_a} to {city_b}")
+        flight_requirements = ", ".join(flight_reqs) + "."
 
         prompt = prompt_template.replace("{{city_nums}}", str(city_nums)) \
             .replace("{{total_day}}", str(total_day)) \
             .replace("{{stay_requirements}}", stay_requirements) \
             .replace("{{flight_requirements}}", flight_requirements)
 
-        llm_output = ""
+        return prompt
+
+    def process_single(index):
+        item = all_data[index]
+        prompt = build_prompt(item)
+        output_original = ""
+        parsed_output = ""
+
         try:
             response = client.chat.completions.create(
                 model=model_engine,
-                messages=[
-                    {"role": "user", "content": prompt},
-                ],
+                messages=[{"role": "user", "content": prompt}],
                 max_tokens=max_new_token,
                 temperature=temperature,
-                top_p=top_p,
-                # n=1,
-                # stop=None,
+                top_p=top_p
             )
-
             llm_output = response.choices[0].message.content.strip().replace("\n", "")
+            output_original = llm_output
 
-            # 去除首尾的空白字符并替换换行符
-            llm_output = llm_output.strip().replace("\n", "")
-            llm_output_original = llm_output
+            json_start = llm_output.find("{")
+            json_end = llm_output.rfind("}")
+            if json_start == -1 or json_end == -1:
+                raise ValueError("No JSON object found in output.")
+            parsed_output = json.loads(llm_output[json_start:json_end + 1])
 
-            json_start = llm_output.index("{")
-            json_end = llm_output.rindex("}") + 1
-            llm_output = llm_output[json_start:json_end]
-            parsed_output = json.loads(llm_output)
-
-            response = {
-                "config": item_config,
+            result = {
+                "config": item["config"],
                 "success": True,
-                "problem": item_problem,
+                "problem": item["problem"],
                 "prompt": prompt,
                 "feasible_solution": item.get("feasible_solution", []),
-                "llm_output": llm_output_original,
+                "llm_output": output_original,
                 "parsed_output": parsed_output
             }
 
         except Exception as e:
-            response = {
-                "config": item_config,
+            print(f"[ERROR index {index}]:", e)
+            result = {
+                "config": item["config"],
                 "success": False,
-                "problem": item_problem,
+                "problem": item["problem"],
                 "prompt": prompt,
                 "feasible_solution": item.get("feasible_solution", []),
-                "llm_output": llm_output_original,
+                "llm_output": output_original,
                 "parsed_output": ""
             }
 
-            print(f"Error at index {data.index(item)}: {e}")
+        return index, result
 
-        responses.append(response)
-        my_bar.progress((data.index(item) + 1) / total_data_num, text=f"Processing {data.index(item) + 1}/{total_data_num}")
-        # time.sleep(25)
+    if if_parallel:
+        with ThreadPoolExecutor(max_workers=parallel_num) as executor:
+            for start in range(0, total_data_num, parallel_num):
+                indices = list(range(start, min(start + parallel_num, total_data_num)))
+                future_to_idx = {executor.submit(process_single, i): i for i in indices}
+                results = {}
 
-        # 将当前结果保存到 JSON 文件
-        with open(save_file, "w") as f:
-            json.dump({"metadata": metadata, "responses": responses}, f, indent=4)
+                for future in as_completed(future_to_idx):
+                    idx, res = future.result()
+                    results[idx] = res
+
+                # 读取之前的数据
+                with open(save_file, "r") as f:
+                    saved = json.load(f)
+
+                # 结果顺序写入
+                for i in indices:
+                    saved["responses"].append(results[i])
+                    progress += 1
+                    my_bar.progress(progress / total_data_num, text=f"Processing {progress}/{total_data_num}")
+
+                # 保存
+                with open(save_file, "w") as f:
+                    json.dump(saved, f, indent=4)
+
+    else:
+        for i in range(total_data_num):
+            _, res = process_single(i)
+
+            with open(save_file, "r") as f:
+                saved = json.load(f)
+
+            saved["responses"].append(res)
+            progress += 1
+            my_bar.progress(progress / total_data_num, text=f"Processing {progress}/{total_data_num}")
+
+            with open(save_file, "w") as f:
+                json.dump(saved, f, indent=4)
 
     st.success(f"Trip response generation completed. Results saved to {save_file}")
-
 
 def evaluate_trip_response(response_path, task_name):
     with open(response_path, "r") as f:
@@ -505,7 +537,7 @@ def validate(solution, problem):
 
     # Validate flight continuity
     for i in range(len(itinerary) - 1):
-        if not problem['flights'][itinerary[i]].get(itinerary[i + 1], False):
+        if not problem['flights'].get(itinerary[i], False) or not problem['flights'][itinerary[i]].get(itinerary[i + 1], False):
             errors.append({
                 "type": "No direct flight",
                 "reason": f"No direct flight from {itinerary[i]} to {itinerary[i + 1]}."

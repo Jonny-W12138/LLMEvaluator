@@ -8,7 +8,7 @@ from openai import OpenAI
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 from peft import PeftModel, PeftConfig
 import torch
-
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 # 计算两地之间的通勤时间
@@ -372,30 +372,30 @@ def generate_meeting_response_model(dataset_path, model_name, model_adapter, tas
     st.success(f"Meeting response generation completed. See {save_file}.")
 
 def generate_meeting_response_api(dataset_path, api_key, api_url, model_engine, task_name,
-                                  prompt_template, max_new_token, temperature, top_p):
+                                  prompt_template, max_new_token, temperature, top_p,
+                                  if_parallel=False, parallel_num=4):
+
     required_fields = ["{{original_position}}", "{{available_times}}", "{{commuting_time}}"]
+    for field in required_fields:
+        if field not in prompt_template:
+            st.error(f"Prompt template missing field: {field}")
+            return
 
-    if not all(field in prompt_template for field in required_fields):
-        raise ValueError(f"Prompt template must contain all required fields: {required_fields}")
+    with open(dataset_path, "r", encoding="utf-8") as f:
+        json_data = json.load(f)
 
-    with open(dataset_path, "r", encoding="utf-8") as file:
-        data = json.load(file)
-
-    metadata_data = data['metadata']
-    cities_data_path = metadata_data['cities_data_path']
-
-    data = data['problems']
-    total_data_num = len(data)
+    city_data = json.load(open(json_data["metadata"]["cities_data_path"], "r", encoding="utf-8"))
+    all_data = json_data["problems"]
+    total_data_num = len(all_data)
 
     current_time = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-
     save_folder = os.path.join(os.getcwd(), "tasks", task_name, "planning", "meeting", "response")
     os.makedirs(save_folder, exist_ok=True)
     save_file = os.path.join(save_folder, f"meeting_response_{current_time}.json")
 
     metadata = {
         "dataset_path": dataset_path,
-        "cities_data_path": cities_data_path,
+        "cities_data_path": json_data["metadata"]["cities_data_path"],
         "api_url": api_url,
         "model_engine": model_engine,
         "total_data_num": total_data_num,
@@ -405,17 +405,15 @@ def generate_meeting_response_api(dataset_path, api_key, api_url, model_engine, 
         "top_p": top_p
     }
 
-    with open(cities_data_path, "r", encoding="utf-8") as file:
-        city_data = json.load(file)
-
-    responses = []
-
     client = OpenAI(api_key=api_key, base_url=api_url)
 
-    mybar = st.progress(0)
+    with open(save_file, "w") as f:
+        json.dump({"metadata": metadata, "responses": []}, f, indent=4, ensure_ascii=False)
 
-    for item in data:
+    my_bar = st.progress(0)
+    progress = 0
 
+    def build_prompt(item):
         places = item['problem']['places']
         available_times = ""
         commuting_time = ""
@@ -425,78 +423,98 @@ def generate_meeting_response_api(dataset_path, api_key, api_url, model_engine, 
 
         for i in range(len(places)):
             for j in range(len(places)):
-                if i == j:
-                    continue  # 跳过同一个地点的组合
-                start = places[i]
-                end = places[j]
-                commuting_time += f"It takes {get_commuting_time(city_data[item['problem']['city']], start, end)} minutes to travel from {start} to {end}. "
+                if i != j:
+                    start, end = places[i], places[j]
+                    time = get_commuting_time(city_data[item['problem']['city']], start, end)
+                    commuting_time += f"It takes {time} minutes to travel from {start} to {end}. "
 
         prompt = prompt_template.replace("{{original_position}}", item['problem']['origin_place']) \
             .replace("{{available_times}}", available_times) \
             .replace("{{commuting_time}}", commuting_time)
-        messages = [
-            {"role": "user", "content": prompt}
-        ]
 
-        kwargs = {
-            "text_inputs": messages,
-            "max_new_tokens": max_new_token,
-            "top_p": top_p
-        }
+        return prompt
 
-        if temperature == 0.0:
-            kwargs["do_sample"] = False
-        else:
-            kwargs["temperature"] = temperature
-
-        llm_output = ""
-        origin_output = ""
+    def process_single(index):
+        item = all_data[index]
+        prompt = build_prompt(item)
+        output_original = ""
+        parsed_output = ""
 
         try:
-            llm_output = client.chat.completions.create(
+            response = client.chat.completions.create(
                 model=model_engine,
-                messages=[
-                    {"role": "user", "content": prompt},
-                ],
+                messages=[{"role": "user", "content": prompt}],
                 max_tokens=max_new_token,
                 temperature=temperature,
-                top_p=top_p,
+                top_p=top_p
             )
+            llm_output = response.choices[0].message.content.strip().replace("\n", "")
+            output_original = llm_output
 
-            llm_output = llm_output.choices[0].message.content.strip().replace("\n", "")
+            json_start = llm_output.find("{")
+            json_end = llm_output.rfind("}")
+            if json_start == -1 or json_end == -1:
+                raise ValueError("No JSON object found in output.")
+            parsed_output = json.loads(llm_output[json_start:json_end + 1])
 
-            origin_output = llm_output
-            json_start = llm_output.index("{")
-            json_end = llm_output.rindex("}") + 1
-            llm_output = llm_output[json_start:json_end]
-            parsed_output = json.loads(llm_output)
-
-            response = ({
-                "metadata": item['metadata'],
+            result = {
+                "metadata": item["metadata"],
                 "success": True,
-                "problem": item['problem'],
+                "problem": item["problem"],
                 "prompt": prompt,
-                "origin_output": origin_output,
-                "llm_output": parsed_output,
-            })
-        except Exception as e:
-            response = {
-                "metadata": item['metadata'],
-                "success": False,
-                "problem": item['problem'],
-                "prompt": prompt,
-                "origin_output": origin_output,
-                "llm_output": llm_output,
+                "origin_output": output_original,
+                "llm_output": parsed_output
             }
-            print(e)
 
-        responses.append(response)
-        mybar.progress((data.index(item) + 1) / len(data), text=f"Processing {data.index(item) + 1} / {len(data)}")
+        except Exception as e:
+            print(f"[ERROR index {index}]:", e)
+            result = {
+                "metadata": item["metadata"],
+                "success": False,
+                "problem": item["problem"],
+                "prompt": prompt,
+                "origin_output": output_original,
+                "llm_output": ""
+            }
 
-        with open(save_file, "w", encoding="utf-8") as file:
-            json.dump({"metadata": metadata, "responses": responses}, file, indent=4, ensure_ascii=False)
+        return index, result
 
-    st.success(f"Meeting response generation completed. See {save_file}.")
+    if if_parallel:
+        with ThreadPoolExecutor(max_workers=parallel_num) as executor:
+            for start in range(0, total_data_num, parallel_num):
+                indices = list(range(start, min(start + parallel_num, total_data_num)))
+                future_to_index = {executor.submit(process_single, i): i for i in indices}
+                results = {}
+
+                for future in as_completed(future_to_index):
+                    idx, res = future.result()
+                    results[idx] = res
+
+                with open(save_file, "r") as f:
+                    saved = json.load(f)
+
+                for i in indices:
+                    saved["responses"].append(results[i])
+                    progress += 1
+                    my_bar.progress(progress / total_data_num, text=f"Processing {progress}/{total_data_num}")
+
+                with open(save_file, "w", encoding="utf-8") as f:
+                    json.dump(saved, f, indent=4, ensure_ascii=False)
+    else:
+        for i in range(total_data_num):
+            _, res = process_single(i)
+
+            with open(save_file, "r") as f:
+                saved = json.load(f)
+
+            saved["responses"].append(res)
+            progress += 1
+            my_bar.progress(progress / total_data_num, text=f"Processing {progress}/{total_data_num}")
+
+            with open(save_file, "w", encoding="utf-8") as f:
+                json.dump(saved, f, indent=4, ensure_ascii=False)
+
+    st.success(f"Meeting response generation completed. See {save_file}")
 
 def parse_time(time_str):
     """Convert time string to datetime object"""
@@ -552,17 +570,33 @@ def evaluate_response(response, cities_data):
             })
             # return result
 
+        # first_start = parse_time(sorted_visits[0][1]["start"])
+        # origin_available_time = visit_info[origin_place]["available_time"]
+        # origin_available_end = parse_time(origin_available_time[1])
+        #
+        # if origin_available_end + datetime.timedelta(minutes=travel_time) > first_start:
+        #     result["evaluation"]["passed"] = False
+        #     result["evaluation"]["errors"].append({
+        #         "type": "Time Conflict",
+        #         "reason": f"Travel time from {origin_place} to {first_place} causes a time conflict"
+        #     })
+            # return result
         first_start = parse_time(sorted_visits[0][1]["start"])
-        origin_available_time = visit_info[origin_place]["available_time"]
-        origin_available_end = parse_time(origin_available_time[1])
+        origin_to_first_travel_time = get_travel_time(cities_data, city, origin_place, first_place)
+        if origin_to_first_travel_time is None:
+            result["evaluation"]["passed"] = False
+            result["evaluation"]["errors"].append({
+                "type": "Missing Travel Time",
+                "reason": f"Cannot find travel time from {origin_place} to {first_place}"
+            })
+            # return result
 
-        if origin_available_end + datetime.timedelta(minutes=travel_time) > first_start:
+        elif parse_time("9:00") + datetime.timedelta(minutes=origin_to_first_travel_time) > first_start:
             result["evaluation"]["passed"] = False
             result["evaluation"]["errors"].append({
                 "type": "Time Conflict",
                 "reason": f"Travel time from {origin_place} to {first_place} causes a time conflict"
             })
-            # return result
 
     # Check if the number of places in llm_output matches the number in best_route
     if len(llm_output) < len(best_route):
@@ -578,17 +612,26 @@ def evaluate_response(response, cities_data):
         current_place, current_time = sorted_visits[i]
         next_place, next_time = sorted_visits[i + 1]
 
+        if current_place not in visit_info:
+            result["evaluation"]["passed"] = False
+            result["evaluation"]["errors"].append({
+                "type": "Invalid Place",
+                "reason": f"Place {current_place} is not in visit_info"
+            })
+            continue
+
         # Check if the current place's visit time is within available_time
         current_start = parse_time(current_time["start"])
         current_end = parse_time(current_time["end"])
         available_time = visit_info[current_place]["available_time"]
+
+
         if current_start < parse_time(available_time[0]) or current_end > parse_time(available_time[1]):
             result["evaluation"]["passed"] = False
             result["evaluation"]["errors"].append({
                 "type": "Invalid Visit Time",
                 "reason": f"Visit time for {current_place} is not within available_time"
             })
-            # return result
 
         # Check travel time
         travel_time = get_travel_time(cities_data, city, current_place, next_place)
@@ -598,17 +641,15 @@ def evaluate_response(response, cities_data):
                 "type": "Missing Travel Time",
                 "reason": f"Cannot find travel time from {current_place} to {next_place}"
             })
-            # return result
-
-        # Check if the next place's start time is reasonable
-        next_start = parse_time(next_time["start"])
-        if current_end + datetime.timedelta(minutes=travel_time) > next_start:
-            result["evaluation"]["passed"] = False
-            result["evaluation"]["errors"].append({
-                "type": "Time Conflict",
-                "reason": f"Travel time from {current_place} to {next_place} causes a time conflict"
-            })
-            # return result
+        else:
+            # Check if the next place's start time is reasonable
+            next_start = parse_time(next_time["start"])
+            if current_end + datetime.timedelta(minutes=travel_time) > next_start:
+                result["evaluation"]["passed"] = False
+                result["evaluation"]["errors"].append({
+                    "type": "Time Conflict",
+                    "reason": f"Travel time from {current_place} to {next_place} causes a time conflict"
+                })
 
     return result
 

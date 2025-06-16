@@ -17,9 +17,10 @@ def display_meeting_metrics(data):
     展示会面安排的关键指标
     """
     total_tests = len(data["results"])
+
     successful_tests = sum(1 for item in data["results"] if item["success"])
-    passed_tests = sum(1 for item in data["results"] if item["evaluation"]["passed"])
-    pass_rate = (passed_tests / total_tests) * 100 if total_tests > 0 else 0
+    passed_tests = sum(1 for item in data["results"] if item["success"] == True and item["evaluation"]["passed"])
+    pass_rate = (passed_tests / successful_tests) * 100 if total_tests > 0 else 0
 
     # 显示关键指标
     col1, col2, col3, col4 = st.columns(4)
@@ -39,8 +40,8 @@ def display_meeting_charts(data):
     # 准备数据
     chart_data = {
         "Total Tests": len(data["results"]),
-        "Successful Tests": sum(1 for item in data["results"] if item["success"]),
-        "Passed Tests": sum(1 for item in data["results"] if item["evaluation"]["passed"]),
+        "Successful Tests": sum(1 for item in data["results"] if item["success"] ),
+        "Passed Tests": sum(1 for item in data["results"] if item["success"] and item["evaluation"]["passed"]),
     }
     df = pd.DataFrame(list(chart_data.items()), columns=["Metric", "Count"])
 
@@ -49,12 +50,12 @@ def display_meeting_charts(data):
 
 def display_meeting_pie_chart(data):
 
-    passed_count = sum(1 for item in data["results"] if item["evaluation"]["passed"])
+    passed_count = sum(1 for item in data["results"] if item["success"] and item["evaluation"]["passed"])
     failed_count = len(data["results"]) - passed_count
 
     error_types = {}
     for item in data["results"]:
-        if not item["evaluation"]["passed"]:
+        if item["success"] and not item["evaluation"]["passed"]:
             for error in item["evaluation"]["errors"]:
                 error_type = error["type"]
                 if error_type in error_types:
@@ -92,9 +93,9 @@ def display_meeting_details(data):
             "Num Places": item["metadata"]["num_places"],
             "Num Conflicts": item["metadata"]["num_conflicts"],
             "Success": item["success"],
-            "Passed": item["evaluation"]["passed"],
-            "Errors": ", ".join([error["type"] for error in item["evaluation"]["errors"]]) if not item["evaluation"][
-                "passed"] else "None"
+            "Passed": item["evaluation"]["passed"] if item["success"] else False,
+            "Errors": (", ".join([error["type"] for error in item["evaluation"]["errors"]]) if not item["evaluation"][
+                "passed"] else "None") if item["success"] else None
         })
     df = pd.DataFrame(details)
 
@@ -136,7 +137,7 @@ def display_meeting_difficulty_metrics(data):
         num_places, num_conflicts = key
         total_tests = len(group)
         successful_tests = sum(1 for item in group if item["success"])
-        passed_tests = sum(1 for item in group if item["evaluation"]["passed"])
+        passed_tests = sum(1 for item in group if item["success"] and item["evaluation"]["passed"])
         pass_rate = (passed_tests / total_tests) * 100 if total_tests > 0 else 0
         difficulty_data.append({
             "Difficulty": f"{num_places} Places, {num_conflicts} Conflicts",
@@ -163,7 +164,7 @@ def generate_meeting_html_report(data):
     """生成精美的 HTML 报告"""
     total_tests = len(data["results"])
     successful_tests = sum(1 for item in data["results"] if item["success"])
-    passed_tests = sum(1 for item in data["results"] if item["evaluation"]["passed"])
+    passed_tests = sum(1 for item in data["results"] if item["success"] and item["evaluation"]["passed"])
     pass_rate = (passed_tests / total_tests) * 100 if total_tests > 0 else 0
 
     # 生成柱状图
@@ -185,7 +186,7 @@ def generate_meeting_html_report(data):
     # 生成错误类型分布饼图
     error_types = {}
     for item in data["results"]:
-        if not item["evaluation"]["passed"]:
+        if item["success"] and not item["evaluation"]["passed"]:
             for error in item["evaluation"]["errors"]:
                 error_type = error["type"]
                 error_types[error_type] = error_types.get(error_type, 0) + 1
@@ -211,7 +212,7 @@ def generate_meeting_html_report(data):
         num_places, num_conflicts = key
         total_tests_group = len(group)
         successful_tests_group = sum(1 for item in group if item["success"])
-        passed_tests_group = sum(1 for item in group if item["evaluation"]["passed"])
+        passed_tests_group = sum(1 for item in group if item["success"] and item["evaluation"]["passed"])
         pass_rate_group = (passed_tests_group / total_tests_group) * 100 if total_tests_group > 0 else 0
         difficulty_data.append({
             "Difficulty": f"{num_places} Places, {num_conflicts} Conflicts",
@@ -239,8 +240,9 @@ def generate_meeting_html_report(data):
             "Num Places": item["metadata"]["num_places"],
             "Num Conflicts": item["metadata"]["num_conflicts"],
             "Success": item["success"],
-            "Passed": item["evaluation"]["passed"],
-            "Errors": ", ".join([error["type"] for error in item["evaluation"]["errors"]]) if not item["evaluation"]["passed"] else "None"
+            "Passed": item["evaluation"]["passed"] if item["success"] else False,
+            "Errors": (", ".join([error["type"] for error in item["evaluation"]["errors"]]) if not item["evaluation"]["passed"] else "None")
+                if item["success"] else None
         }
         for index, item in enumerate(data["results"])
     ]

@@ -183,6 +183,12 @@ JSON Output:"""
     with response_generate_args_col[2]:
         top_p = st.number_input("Top p", value=1.0, min_value=0.0, max_value=1.0, step=0.1)
 
+    if model_source == "API":
+        if_parallel = st.toggle("Parallel", value=False)
+        parallel_num = 0
+
+        if if_parallel:
+            parallel_num = st.number_input("Parallel number", value=4, min_value=1)
 
     if st.button("Generate"):
         if "field_mapping" not in st.session_state:
@@ -197,6 +203,8 @@ JSON Output:"""
                         api_url=api_url,
                         api_key=api_key,
                         model_engine=model_engine,
+                        if_parallel=if_parallel,
+                        parallel_num=parallel_num,
                         field_mapping=pd.DataFrame(st.session_state["field_mapping"]),
                         max_tokens=max_tokens,
                         temperature=temperature,
@@ -348,6 +356,10 @@ Summary:
             api_url = st.text_input("API URL", key="judge_model_api_url")
             api_key = st.text_input("API key", key="judge_model_api_key")
             model_engine = st.text_input("Model engine", key="judge_model_engine")
+            if_parallel = st.toggle("Parallelization", value=False, key="judge_model_if_parallel")
+            parallel_num = 0
+            if if_parallel:
+                parallel_num = st.number_input("Parallel number", value=4, min_value=1, key="llm_judge_parallel_num")
 
         else:
             llm_judge_use_adapter = st.toggle("Use adapter", value=False, key="llm_judge_use_adapter")
@@ -428,6 +440,8 @@ Summary:
                             api_url=api_url,
                             api_key=api_key,
                             model_engine=model_engine,
+                            if_parallel=if_parallel,
+                            parallel_num=parallel_num,
                             field_mapping=pd.DataFrame(st.session_state["field_mapping"]),
                             max_tokens=max_tokens,
                             temperature=temperature,
@@ -457,7 +471,11 @@ Summary:
             api_url = st.text_input("API URL", key="judge_model_api_url_fact_alignment")
             api_key = st.text_input("API key", key="judge_model_api_key_fact_alignment")
             model_engine = st.text_input("Model engine", key="judge_model_engine_fact_alignment")
+            if_parallel = st.toggle("Parallel", value=False, key="llm_judge_parallel_fact_alignment")
+            parallel_num = 0
 
+            if if_parallel:
+                parallel_num = st.number_input("Parallel number", value=4, min_value=1, key="llm_judge_parallel_num_fact_alignment")
         else:
             llm_judge_use_adapter = st.toggle("Use adapter", value=False, key="llm_judge_use_adapter_fact_alignment")
             if llm_judge_use_adapter:
@@ -501,7 +519,7 @@ key facts:
 
                 max_token_col, temperature_col, top_p_col = st.columns(3)
                 with max_token_col:
-                    max_tokens = st.number_input("Max tokens", value=400, min_value=1, key="llm_judge_max_tokens_fact_alignment")
+                    max_tokens = st.number_input("Max tokens", value=1200, min_value=1, key="llm_judge_max_tokens_fact_alignment")
                 with temperature_col:
                     temperature = st.number_input("Temperature",
                                                   value=0.0, min_value=0.0, max_value=1.0, step=0.1, key="llm_judge_temperature_fact_alignment")
@@ -534,6 +552,8 @@ key facts:
                             api_url=api_url,
                             api_key=api_key,
                             model_engine=model_engine,
+                            if_parallel=if_parallel,
+                            parallel_num=parallel_num,
                             field_mapping=pd.DataFrame(st.session_state["field_mapping"]),
                             max_tokens=max_tokens,
                             temperature=temperature,
