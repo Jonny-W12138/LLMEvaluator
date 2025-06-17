@@ -12,8 +12,6 @@ Currently, it supports comprehensive evaluation of the following core capabiliti
 - 🔍 **Reasoning** — Examine the model’s logical thinking and problem-solving abilities.
 - 📚 **Retrieval** — Measure how effectively the model uses or extracts information from external sources or knowledge bases.
 
-In addition to these built-in categories, you can easily define and integrate **custom capabilities** to tailor the evaluation to your specific needs.
-
 ## ⚙️ Environment Setup
 
 ### 1️⃣ Clone the Repository
