@@ -33,12 +33,22 @@ conda create -n LLMEvaluator python=3.12
 pip install -r requirements.txt
 ```
 
-Specially, please install [BLEURT](https://github.com/google-research/bleurt) for summarization capability evaluation.
+> [!NOTE]
+>
+> Specially, please install [BLEURT](https://github.com/google-research/bleurt) for summarization capability evaluation.
+>
+> ```bash
+> git clone https://github.com/google-research/bleurt.git
+> cd bleurt
+> pip install .
+> ```
+
+### 4️⃣ Launch the Application
+
+In the project **root directory**, run the following command to start the web-based user interface:
 
 ```bash
-git clone https://github.com/google-research/bleurt.git
-cd bleurt
-pip install .
+streamlit run src/front/app.py
 ```
 
 ## 📑 Dataset Preparation
