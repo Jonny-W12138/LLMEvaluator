@@ -14,8 +14,6 @@ Currently, it supports comprehensive evaluation of the following core capabiliti
 
 In addition to these built-in categories, you can easily define and integrate **custom capabilities** to tailor the evaluation to your specific needs.
 
----
-
 ## ⚙️ Environment Setup
 
 ### 1️⃣ Clone the Repository
@@ -45,8 +43,6 @@ cd bleurt
 pip install .
 ```
 
----
-
 ## 📑 Dataset Preparation
 
 We provide **predefined benchmark datasets** for each of the five supported capabilities: **Summarization**, **Planning**, **Computation**, **Reasoning**, and **Retrieval**. These built-in datasets help you get started quickly and ensure consistent comparisons across different models.
@@ -61,8 +57,6 @@ You can also evaluate your models with **custom datasets**:
 
 - **Via the UI**: Use the web interface to upload new datasets.
 - **Manually**: Place your dataset files in the `dataset/` directory at the project root. Organize them in subfolders (e.g., `dataset/summarization/`, `dataset/planning/`, etc.).
-
----
 
 ## ✅ Evaluation Process
 
